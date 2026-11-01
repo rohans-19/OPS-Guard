@@ -1,0 +1,132 @@
+Audit and Experimental Evaluation
+Restricted Kubernetes Execution
+OpsGuard Security Enforcement Layer
+NLP-Based Prompt-Injection Detection
+AI Cloud Management Agent
+Local Cloud Infrastructure (Kubernetes)
+Approve
+Reject
+Legend
+Solid arrow: 
+execution and 
+control flow
+Dashed arrow: 
+audit, 
+monitoring, and 
+evaluation flow
+Kubernetes 
+Cluster (kind)
+Sample 
+Application 
+(demo-web)
+Kubernetes 
+Resources
+Deployments, 
+Pods, Services
+Application Logs
+Monitoring 
+Alerts and 
+Events
+Simulated 
+Application 
+Faults
+Application 
+Health Problems
+User Task Input
+LLM-Based Agent
+Diagnostic Tool 
+Interface
+Resource 
+Inspection Tools
+Fault Diagnosis
+Proposed 
+Corrective 
+Action
+Operational 
+Text 
+Preprocessing
+Text Feature 
+Extraction (TF-
+IDF)
+Machine-
+Learning 
+Classifier
+(Logistic 
+Regression / 
+Linear SVM)
+Classification 
+Result
+(Benign / 
+Potentially 
+Malicious)
+Action Request 
+Validation
+Resource and 
+Permission 
+Checks
+Classification-
+Aware Risk 
+Assessment
+Policy Rules
+Hard Policy 
+Violation
+Policy 
+Enforcement
+Decision Router
+ALLOW
+Permit 
+authorized 
+operation
+BLOCK
+Reject 
+prohibited 
+operation
+HUMAN APPROVAL
+Pause sensitive 
+operation
+Human Reviewer
+Kubernetes 
+Python Client
+Restricted 
+ServiceAccount 
+and RBAC
+Approved Cloud-
+Management 
+Operations
+Kubernetes API
+Updated 
+Infrastructure 
+State
+Security 
+Decision Audit 
+Log
+(JSONL / SQLite)
+Attack Scenario 
+Dataset
+Experiment 
+Runner
+Benchmark 
+Configurations
+NLP 
+Classification 
+Metrics
+Attack Success 
+Rate (ASR)
+Task Completion 
+Rate
+Unsafe Action 
+Rate
+False-Block Rate
+Latency and 
+Cost Analysis
+Experimental 
+Results
+Unprotected 
+Baseline
+Prompt-Warning 
+Baseline
+Fixed-Rule 
+Defense
+Proposed 
+OpsGuard 
+Framework

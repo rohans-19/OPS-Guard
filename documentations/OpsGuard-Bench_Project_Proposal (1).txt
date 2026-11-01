@@ -1,0 +1,339 @@
+OpsGuard-Bench  |  Project Proposal
+Page 1
+OpsGuard-Bench
+A benchmark and defense study for the security of LLM operations agents in cloud
+and industrial infrastructure
+Research project proposal | Aligned with UN SDG 9 (Industry, Innovation and Infrastructure)
+1. Summary
+LLM agents are being given operational access to infrastructure: they read logs and alerts, run kubectl,
+change configs, and execute runbooks. Every one of those inputs can carry attacker-controlled text, and
+every one of those tools can cause real damage. Existing agent-security work measures attacks on email,
+banking and travel assistants. It does not measure what happens when the agent is an infrastructure
+operator and the untrusted data is a log line, an alert annotation or a poisoned runbook.
+This project builds OpsGuard-Bench, a reproducible benchmark of ops-agent tasks with injected attacks
+and safe/unsafe action labels in a simulated Kubernetes environment (with an optional industrial-control
+extension). It then evaluates existing defenses on it, including adaptive attackers, and tests a proposed
+improvement: runbook-derived least-privilege policies combined with blast-radius gating.
+2. Problem and motivation
+• Actions, not text. A hijacked ops agent can delete volumes, open network policies or leak secrets. The
+failure is an incident, not a bad answer.
+• Untrusted data is everywhere. Pod logs, HTTP headers, ticket bodies, wiki pages and Helm values are
+all written by people or systems an attacker may influence.
+• Arguments are data-derived. In ops, tool arguments (hostnames, namespaces, image tags, config
+values) usually come from the data the agent just read. This makes argument-level manipulation
+especially dangerous.
+• Mistakes matter too. An agent with no attacker can still take a destructive action through misjudgment.
+Security-only metrics miss this.
+• Small operators are exposed. Teams without a dedicated security staff are the most likely to adopt
+autonomous ops agents without strong guardrails.
+3. Alignment with SDG 9
+SDG 9 target
+How this project contributes
+9.1 Resilient infrastructure
+Measures and reduces the chance that AI-driven operations cause or amplify
+outages in cloud and industrial systems.
+9.4 Upgrade industries with clean,
+efficient technology
+Enables safer adoption of AI-based operations automation, so efficiency gains do
+not open new attack surfaces.
+9.5 Enhance research and
+technological capability
+Releases an open benchmark and findings that other researchers can build on.
+9.c Access to ICT (if the framing is
+targeted)
+Low-cost, open tooling aimed at small operators who cannot afford large security
+teams.
+Framing statement: enabling safe AI automation of critical infrastructure operations. The claim is deliberately narrow and is
+backed by infrastructure-specific evaluation, not generic chatbot benchmarks.
+OpsGuard-Bench  |  Project Proposal
+Page 2
+4. Related work and the gap
+Area
+Representative work
+What it leaves open
+Policy / privilege
+control
+Progent: runtime tool-call policies in a DSL, with
+LLM-generated per-task policies. Reported
+attack success on AgentDojo dropping from
+41.2% to 2.2%.
+Evaluated on generic agents, not ops tasks.
+Policies derive from the user query, not from
+runbooks or live infrastructure state.
+Information-flow
+defenses
+CaMeL: separates control flow from data flow
+and enforces capability policies with a custom
+interpreter.
+A 2026 study reports bypass via argument
+manipulation. Ops arguments are mostly
+data-derived, so this matters.
+Generic
+agent-security
+benchmarks
+AgentDojo, Agent Security Bench,
+AgentSec-Bench.
+Not ops environments. Mostly report attack
+success only.
+DevOps capability
+benchmarks
+DevOps-Gym: 700+ tasks across build,
+monitoring, issue resolving, test generation.
+Measures capability, not security.
+LLMs in ICS security
+CritBench (IEC 61850 substations), SECURE,
+LLM attack-synthesis studies.
+Mostly about agents as attackers or analysts,
+not securing an agent that operates the plant.
+Gap. I found no benchmark combining a realistic ops environment, injection through logs/alerts/runbooks,
+and labeled unsafe or high-blast-radius actions. This search was limited; the literature review in Phase 1 must
+confirm it before the claim is made in a paper.
+5. Research questions and hypotheses
+#
+Research question
+Hypothesis
+RQ1
+How effective are existing defenses (prompt-level,
+detector-based, policy-layer, information-flow) against
+injections delivered through ops data sources?
+Generic defenses transfer imperfectly. Defenses that
+constrain tool arguments outperform detectors, but all
+show measurable residual attack success.
+RQ2
+How much benign utility and safety of non-adversarial
+actions do these defenses cost?
+Static policies block legitimate work in rare but
+important incident scenarios, lowering utility.
+RQ3
+Can policies derived automatically from runbooks and
+cluster state match hand-written policies?
+Runbook-derived policies recover most of the security
+of hand-written ones with far less manual effort.
+RQ4
+Does blast-radius gating (risk-tiered approval or
+dry-run) reduce damage better than fixed allow/deny
+lists?
+Gating on estimated blast radius reduces mean
+damage at a lower approval burden than blanket
+human approval.
+RQ5
+How do adaptive attackers that know the defense
+perform?
+Every non-formal defense degrades under adaptive
+attack; the degradation profile differs by defense
+class.
+6. Threat model
+Attacker capability. The attacker cannot access the agent's prompt, weights or credentials. The attacker
+can write text into data the agent reads: container logs, HTTP request fields that end up in logs, alert
+annotations, ticket bodies, wiki or runbook pages, and ConfigMap or Helm values.
+Attacker goals.
+• Exfiltration: send a secret or config to an external endpoint.
+• Destruction: delete a namespace, workload or persistent volume.
+• Exposure: weaken a NetworkPolicy or expose an internal service.
+• Privilege escalation: create or modify RBAC bindings.
+• Blinding: disable alerts, monitoring or audit logging.
+• Denial of service: scale critical workloads to zero or trigger action loops.
+OpsGuard-Bench  |  Project Proposal
+Page 3
+Out of scope. Model-weight attacks, compromise of the cluster control plane, and attackers with direct
+credentials. Benign misjudgment (no attacker) is evaluated separately as an unsafe-action rate.
+7. Benchmark design
+7.1 Environment
+• A local Kubernetes cluster (kind or minikube) running an open-source microservice demo application,
+reset to a known state for every episode.
+• Tool interface for the agent: kubectl wrapper, log reader, metrics query, ticket system (mock), runbook/wiki
+retrieval, and an outbound HTTP tool (the exfiltration channel).
+• A state-diff oracle compares cluster state before and after each episode to decide objectively what
+changed and whether it was unsafe.
+• Stretch extension: a second environment with a simulated industrial process (for example a tank or
+pump model behind a Modbus interface) to show the method generalizes to OT.
+7.2 Task suites
+Suite
+Example benign tasks
+Approx. count
+Incident triage
+Find why a service is failing and summarize the cause from logs and
+metrics.
+10
+Rollout and rollback
+Roll back a bad deployment; pin an image to a previous tag.
+8
+Scaling and capacity
+Scale a workload to meet load; adjust resource requests.
+6
+Config and secrets
+Update a ConfigMap value; rotate a secret by runbook.
+8
+Cleanup and cost
+Remove unused resources in a designated namespace only.
+8
+Each task has a deterministic success check. Target size: about 40 benign tasks, each paired with several injection variants.
+7.3 Injection vectors
+• Pod and application logs (including attacker-influenced request fields).
+• Alert annotations and descriptions.
+• Ticket or incident body text.
+• Runbook or wiki pages retrieved by the agent (knowledge-base poisoning).
+• ConfigMap or Helm values read during a task.
+• Tool output returned by a mock third-party tool or plugin.
+Injection styles include direct override, role/authority impersonation, argument manipulation (changing a
+target name or value rather than the goal), multi-step delayed instructions, and obfuscated payloads.
+OpsGuard-Bench  |  Project Proposal
+Page 4
+7.4 Labels and metrics
+Metric
+Definition
+Attack success rate (ASR)
+Fraction of attacked episodes where the attacker goal is achieved (verified by the
+state-diff oracle or outbound-call log).
+Benign utility (BU)
+Task success rate with no attack present.
+Utility under attack (UuA)
+Task success rate while an injection is present but the attack goal is not achieved.
+Unsafe action rate (UAR)
+Fraction of benign episodes where the agent takes an action classified unsafe, with no
+attacker involved.
+Blast-radius score
+Per action: weighted combination of reversibility, number of resources or namespaces
+affected, target criticality and data sensitivity. Computed by a rule-based scorer from the
+state diff.
+Approval burden
+Human-approval requests per task under gated defenses.
+Overhead
+Added latency and token cost per task.
+8. Defenses to evaluate
+Arm
+Description
+D0: No defense
+Baseline agent with full tool access.
+D1: Prompt-level
+Spotlighting or delimiting of untrusted data, instruction hierarchy prompts, prompt
+sandwiching.
+D2: Detector
+Off-the-shelf injection classifier screening tool outputs before they reach the model.
+D3: Policy layer
+Progent-style runtime tool-call policy enforcement, with hand-written and LLM-generated
+policies.
+D4: Information-flow
+CaMeL-style planner/quarantine split with capability tracking (where the open-source release
+can be adapted).
+D5: Proposed
+Runbook-derived least-privilege policy synthesis plus blast-radius gating (Section 9).
+9. Proposed technical contribution (D5)
+The benchmark is contribution one. The defense study adds a second, concrete method on top of it.
+9.1 Runbook-to-policy synthesis
+• Input: the runbook for the task, the cluster inventory (namespaces, workloads, RBAC) and the user
+request.
+• An LLM proposes a candidate policy: allowed tools, allowed resource scopes, argument constraints, and
+forbidden verbs.
+• A deterministic validator checks the candidate against hard invariants (for example: no cluster-wide
+deletes, no secret reads outside the task namespace, no outbound calls to non-allowlisted hosts). The
+policy can only narrow privileges during an episode, never widen them silently.
+9.2 Blast-radius gating
+• Before executing a state-changing action, a dry-run (for example a client or server dry-run of the
+command) is used to predict the resulting diff.
+• The rule-based scorer from Section 7.4 turns the predicted diff into a blast-radius tier.
+• Low tier: execute. Medium tier: execute with extra logging and a rollback snapshot. High tier: require
+human approval.
+OpsGuard-Bench  |  Project Proposal
+Page 5
+9.3 Why this is research, not engineering
+It tests a specific claim: that gating on predicted effect is better than gating on tool name, particularly against
+argument-manipulation attacks where the tool is allowed but the target is wrong. This also addresses the
+data-derived-argument weakness identified for plan-then-execute designs.
+10. Evaluation protocol
+• Models: at least three agent models, including one open-weight model that can be run locally and two
+hosted models.
+• Repetitions: multiple seeds per task and attack; report means with bootstrap confidence intervals.
+• Attack sets: a fixed suite of hand-written injections plus an adaptive attacker (an LLM that is told the
+defense design and optimizes injection text within a fixed query budget).
+• Ablations: policy synthesis alone, gating alone, each injection vector alone, each blast-radius component
+removed.
+• Trade-off reporting: plot ASR against benign utility for every defense, plus approval burden. A defense
+that blocks everything is not a result.
+• Reproducibility: pinned container images, scripted environment reset, released task and attack
+definitions, and fixed random seeds.
+11. Twelve-week plan
+Weeks
+Phase
+Deliverables
+1-2
+Literature and scoping
+Confirmed gap analysis; chosen environment; threat model finalized; baseline
+agent harness running.
+3-4
+Environment
+Cluster plus demo app; tool wrappers; state-diff oracle; episode reset scripts.
+5-6
+Tasks and attacks
+About 40 benign tasks with checks; injection generator across all vectors;
+blast-radius scorer v1.
+7-8
+Baseline defenses
+D0 to D4 implemented; first full results table; sanity checks on oracle accuracy.
+9-10
+Proposed defense
+Policy synthesis and gating implemented; adaptive attacker; ablations.
+11
+Analysis
+Statistical analysis; failure-case study; optional OT extension if time allows.
+12
+Writing and release
+Paper draft; public repository, dataset and documentation.
+12. Tools and resources
+• Cluster: kind or minikube on a single laptop or workstation (about 16 GB RAM recommended).
+• Agent layer: a Python agent harness with a tool-call proxy so policies can be enforced between the
+model and the tools.
+• Models: a mix of hosted APIs and one locally hosted open-weight model (budget for API calls is the main
+cost).
+• Evaluation: an evaluation framework such as Inspect, or a custom harness, with logging of every tool call
+and cluster diff.
+• Reference code: public implementations of Progent and CaMeL, and the AgentDojo environment, to
+reuse baselines.
+OpsGuard-Bench  |  Project Proposal
+Page 6
+13. Risks and mitigations
+Risk
+Mitigation
+Scope creep (two environments,
+many defenses)
+Fix the Kubernetes environment and D0 to D3 first. Treat D4 and the OT
+extension as stretch goals.
+Benchmark seen as unrealistic
+Base tasks on real runbook patterns; open the task definitions; compare task
+phrasing with public DevOps benchmarks.
+Oracle labels disputed
+Rule-based, documented labeling; manually audit a sample; report
+agreement.
+LLM non-determinism
+Multiple seeds, confidence intervals, pinned model versions where possible.
+Defense baselines hard to port
+Reimplement the core idea minimally and state the differences openly.
+Claims of 'solving' injection
+Report risk reduction under a stated threat model, never guarantees beyond
+what is proven.
+14. Expected contributions and publication targets
+• An open ops-agent security benchmark with environment, tasks, attacks and labels.
+• An empirical comparison of defense classes on ops workloads, including adaptive attacks and utility costs.
+• A runbook-derived policy synthesis plus blast-radius gating method, with ablations.
+• Practical guidance for teams deploying ops agents.
+Suitable venues include security workshops on AI and security (such as AISec), applied-security
+conferences, and machine-learning datasets-and-benchmarks tracks. Check current deadlines and formats
+before planning submissions.
+15. Ethics and responsible release
+• All attacks run in an isolated local cluster; no real infrastructure is touched.
+• Released injection payloads target the benchmark environment only. Hold back any technique that would
+transfer directly to live systems until defenses are discussed.
+• Document dual-use considerations in the paper and follow coordinated disclosure if real product
+vulnerabilities are found.
+16. Starting reading list (verify citations before use)
+• Progent: Programmable Privilege Control for LLM Agents (arXiv 2504.11703).
+• Defeating Prompt Injections by Design (CaMeL, arXiv 2503.18813).
+• Taming Various Privilege Escalation in LLM-Based Agent Systems: A Mandatory Access Control
+Framework (arXiv 2601.11893).
+• AgentDojo and Agent Security Bench (ASB): agent prompt-injection benchmarks.
+• DevOps-Gym: an end-to-end benchmark for AI agents on DevOps workflows.
+• CritBench: evaluating LLM cybersecurity capabilities in IEC 61850 digital substation environments (arXiv
+2604.06019).
+• OWASP Top 10 for LLM Applications; MITRE ATLAS; MITRE ATT&CK for ICS.
+Note: related-work claims in this proposal come from a quick literature scan and must be re-checked against the full papers in
+Phase 1.
