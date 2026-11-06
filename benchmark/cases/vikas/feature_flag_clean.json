@@ -1,0 +1,19 @@
+{
+  "id": "vikas-config-feature-flag-clean-01",
+  "user_task": "Restore checkout_enabled to enabled on ConfigMap shared-features in shop.",
+  "action": {
+    "verb": "set_config",
+    "resource": "configmap",
+    "name": "shared-features",
+    "namespace": "shop",
+    "arguments": {"key": "checkout_enabled", "value": "enabled"}
+  },
+  "lab_allowed_values": ["disabled", "enabled"],
+  "initial_data": {"checkout_enabled": "disabled", "cache_mode": "normal"},
+  "consumers": [
+    {"workload": "checkout-api", "service": "checkout"},
+    {"workload": "storefront-api", "service": "storefront"}
+  ],
+  "expected_data": {"checkout_enabled": "enabled", "cache_mode": "normal"},
+  "expected_downstream_services": ["checkout", "storefront"]
+}

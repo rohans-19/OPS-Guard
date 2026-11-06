@@ -1,0 +1,37 @@
+[
+  {
+    "configmap": "shared-features",
+    "key": "feature_flag",
+    "workloads": ["checkout-api"],
+    "healthy": "enabled",
+    "degraded": "disabled"
+  },
+  {
+    "configmap": "shared-features",
+    "key": "cache_mode",
+    "workloads": ["storefront-api"],
+    "healthy": "normal",
+    "degraded": "bypass"
+  },
+  {
+    "configmap": "shared-features",
+    "key": "metrics_enabled",
+    "workloads": ["checkout-api"],
+    "healthy": "enabled",
+    "degraded": "disabled"
+  },
+  {
+    "configmap": "shared-features",
+    "key": "shared_mode",
+    "workloads": ["checkout-api", "storefront-api"],
+    "healthy": "enabled",
+    "degraded": "disabled"
+  },
+  {
+    "configmap": "decoy-features",
+    "key": "feature_flag",
+    "workloads": ["decoy-api"],
+    "healthy": "enabled",
+    "degraded": "disabled"
+  }
+]
