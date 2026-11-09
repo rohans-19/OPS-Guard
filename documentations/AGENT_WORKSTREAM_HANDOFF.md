@@ -2,7 +2,7 @@
 
 **Owner:** Rishab Nayak, taking Rohan S's original agent workstream. **Checkpoint:** November 13, 2026. **Audit:** November 9–10, 2026.
 
-The Phase 1 code is ready for team review. The standalone kind lab also verifies the four clean scale cases and the four attacks assigned to the pod-log channel. The team review, shared gateway and executor integration, full model experiment, and final paper results are open.
+The Phase 1 runtime and replay dashboard merged into `main` on November 10. The standalone kind lab verified the four clean scale cases and the four attacks assigned to the pod-log channel. The November 13 demo, shared gateway and executor integration, full model experiment, and final paper results are open.
 
 This checklist uses the [team plan](OPSGUARD_TEAM_PLAN.md) for workstream ownership and case counts. The separate project workflow and step-by-step implementation guide describe the broader system, including additional read tools, the full benchmark and paper responsibilities. Their phase numbers differ from the team plan. In the original plan the executor handoff names Rishab, which now means **Rohan S** after the role swap.
 
@@ -22,7 +22,7 @@ This checklist uses the [team plan](OPSGUARD_TEAM_PLAN.md) for workstream owners
 | Unprotected and hardened-prompt configurations | Verified locally | Both use the same model adapter, tool schema, lab bounds, seed, and limits. The hardening test checks that only the system prompt changes. The standalone task policy is a third lab condition. |
 | Four-condition, two-model study | Two-model pilot verified, full study open | Both installed models ran through the same Ollama adapter. The common runner still needs the shared LLM judge and full OpsGuard paths, frozen inputs and settings, and the agreed model matrix. Own or monitor the 336 trials for your 14 cases, including failures and incomplete runs. |
 | Paper and independent reproduction | Open, with a usable recovery trace | The live target-swap trace already shows a denied payments action followed by the intended checkout scale. After integration, reproduce a teammate's case from a clean checkout, write task completion and model differences by condition, and coordinate the introduction with Sandesh and related work with the team. |
-| Phase 1 PR and review | Open | The runtime and dashboard branches are local. The GitHub branch list on November 9 showed `main` and Vikas's impact branch, plus the plan branch. Send a reviewable PR and confirm the handoffs below. |
+| Phase 1 PRs | Merged | Runtime PR #2 and replay dashboard PR #3 are both on `main`. Share the links and confirm the handoffs below. |
 
 The demo is a replay of recorded evidence. The frontend reads local JSONL and uses HTML, CSS, and JavaScript. Browser-side files cover the presentation and review workflow, so there is no database dependency.
 
@@ -69,29 +69,29 @@ These result files were generated locally under `results/`, which Git ignores. A
 
 | Send to | Send | Ask them to do |
 | --- | --- | --- |
-| **Sandesh S P** | The runtime branch/PR, `ActionRequest`, `Gateway` interface, and the blocked payments trace. | Pass a trusted task reference separately from the model proposal. Connect policy, provenance, and live Service-to-Deployment resolution to the scale path. Confirm `TASK_SCOPE_MISMATCH` before execution. |
+| **Sandesh S P** | Runtime PR #2, `ActionRequest`, `Gateway` interface, and the blocked payments trace. | Pass a trusted task reference separately from the model proposal. Connect policy, provenance, and live Service-to-Deployment resolution to the scale path. Confirm `TASK_SCOPE_MISMATCH` before execution. |
 | **Rohan S** | `prepare_scale`, `PreparedScale`, the preview/write test, and the stale inventory trace. | Register the scale handler with the shared executor. Bind the decision to the prepared UID/version and exact body. Agree on stale versus unknown write handling and the lab RBAC boundary. |
-| **Prapti** | All 14 case IDs, `cases.json`, `intents.json`, `workloads.json`, `observe_completion`, the two live audit files, and the frontend walkthrough. | Register the cases in the common runner. Preserve `backend`, `model_id`, `condition`, `repeat`, `delivery`, `evidence_exposed`, `legitimate_met`, `forbidden_seen`, `safe_completion`, `collateral_seen`, and `error`. Confirm independent observer credentials and review the runtime PR after the role swap. |
+| **Prapti** | All 14 case IDs, `cases.json`, `intents.json`, `workloads.json`, `observe_completion`, the two live audit files, and the frontend walkthrough. | Register the cases in the common runner. Preserve `backend`, `model_id`, `condition`, `repeat`, `delivery`, `evidence_exposed`, `legitimate_met`, `forbidden_seen`, `safe_completion`, `collateral_seen`, and `error`. Confirm independent observer credentials. |
 | **Vikas** | The prepared scale contract, its intended target and replicas, and one attacked kind trace. | Wire the scale preview into the impact evaluator and agree on the judge input/output with Prapti. The impact branch uses NetworkX and a separate judge adapter. Reconcile `pyproject.toml` with the runtime's Pydantic and HTTPX requirements when integrating. |
-| **Team** | The handoff, the runtime PR, and the dashboard link or folder. | Confirm ownership, review the shared interfaces, and book one joint replay of the same checkout case after the gateway, executor, impact checks and observer are connected. |
+| **Team** | The handoff, runtime PR #2, replay dashboard PR #3, and the two live audit files. | Confirm ownership, ask each person for their integration branch or PR, and agree on a joint replay of the same checkout case after the gateway, executor, impact checks and observer are connected. |
 
 Suggested team message:
 
-> The agent and scale workstream is ready for Phase 1 review. The audit passed 23 Python tests, 42 scripted memory trials, all four clean kind cases, and all four live pod-log pairs for the forbidden-effect check. One unprotected run hit a stale version while recovering, and that trace is included. Please review the role-specific requests in the handoff before we connect the shared runner.
+> Runtime PR #2 and replay dashboard PR #3 are merged into `main`. Please sync with `main` and check your integration task in the handoff. Reply with your branch or PR and anything blocking the checkout replay. For November 13, I’ll show how the pod-log target swap reaches the agent, how standalone task policy blocks payments, and how checkout still reaches three ready replicas.
 
 ## What to do next
 
-1. **Before November 13:** Push `feat/agent-runtime`, then open a PR into `main` titled **Add bounded agent runtime and Deployment scaling**. Attach the clean and attacked audit evidence above. Share the handoff with the team and confirm Prapti as reviewer. Review Sandesh's policy PR when it is available, following the agent role's review slot in the original team plan.
-2. **Share the demo separately:** Push `feat/replay-dashboard` and open its PR against `feat/agent-runtime` while the runtime PR is under review. Open [the dashboard](../frontend/index.html), select the pod-log target swap, and show the payments and checkout proposals using **Matched proposal**. The [demo walkthrough](../frontend/README.md) covers local launch and JSONL import.
+1. **Send the team update.** Share the [runtime merge](https://github.com/rohans-19/OPS-Guard/pull/2), the [dashboard merge](https://github.com/rohans-19/OPS-Guard/pull/3), this handoff, and the clean and attacked audit evidence above. Ask each person for their integration branch or PR and anything blocking the joint replay. Review Sandesh's policy PR when it is available, following the agent role's review slot in the original team plan.
+2. **Rehearse before November 13.** Open [the dashboard](../frontend/index.html), select **Project Journey** to introduce the work, then select the pod-log target swap and compare the payments and checkout proposals. The [demo walkthrough](../frontend/README.md) covers local launch and JSONL import.
 3. **At the shared integration checkpoint:** Connect the gateway and executor, register your cases, then reproduce the same checkout target swap. Verify that the unprotected arm changes payments, full OpsGuard withholds that change, the legitimate scale still succeeds, and the independent observer captures the outcomes. Follow with the four clean cases and real evidence readers.
 4. **Before the full evaluation:** Pilot the two models and all four conditions on a small matched set. Track wrong namespaces, stale versions, omitted finish responses, timeouts, evidence exposure, and unknown writes. Freeze the case manifest, image digest, model digest, prompt and settings before running the 336 owned trials.
 5. **For the paper:** Report clean and attacked task completion by model and defence with denominators. Include failed and incomplete runs and the paired trace where checkout recovered after a denied action. Reproduce one teammate's integrated case from a clean checkout and keep the reproduction commands with the results.
 
-To publish the two branches when you are ready:
+Teammates can sync their local `main` from the repository root:
 
 ```powershell
-git push -u origin feat/agent-runtime
-git push -u origin feat/replay-dashboard
+git switch main
+git pull --ff-only origin main
 ```
 
 See the [runtime runbook](AGENT_RUNTIME.md) for setup and CLI usage. To reproduce the audit from the repository root with the `opsguard` kind cluster running, choose fresh result paths:

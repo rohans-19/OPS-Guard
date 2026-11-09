@@ -4,6 +4,6 @@
 
 [Agent runtime and scaling](documentations/AGENT_RUNTIME.md) covers setup, shared contracts, scripted and Ollama replays, and the live kind smoke test.
 
-[Replay dashboard](frontend/index.html) presents the recorded kind demo offline. See the [demo walkthrough](frontend/README.md) for launch and trace import steps.
+[Replay dashboard](frontend/index.html) presents the recorded kind demo offline. Select **Project Journey** to see the project milestones, verification results, and upcoming checkpoints. See the [demo walkthrough](frontend/README.md) for launch, trace import, and timeline maintenance.
 
 [Agent workstream handoff](documentations/AGENT_WORKSTREAM_HANDOFF.md) tracks the role swap, verified results, and team integration tasks.
