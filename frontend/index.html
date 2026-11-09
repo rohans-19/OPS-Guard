@@ -97,10 +97,20 @@
         </div>
 
         <div class="section-heading compare-heading">
-          <div><h2>Condition comparison</h2><p>Compare the first action proposal with the final observed outcomes.</p></div>
+          <div><h2>Decision comparison</h2><p>See how each condition handled the proposal and what Kubernetes reported.</p></div>
           <span class="badge badge-subtle" id="condition-count"></span>
         </div>
-        <div id="comparison" class="comparison-grid"></div>
+        <div class="comparison-workspace">
+          <div id="proposal-controls" class="proposal-controls" hidden>
+            <div class="proposal-control-copy">
+              <span class="proposal-control-icon" aria-hidden="true"><svg class="icon"><use href="#i-target"/></svg></span>
+              <div><label for="comparison-proposal">Matched proposal</label><p>Compare the first response to the same target and replica count.</p></div>
+            </div>
+            <select id="comparison-proposal"></select>
+          </div>
+          <p id="proposal-note" class="proposal-note" hidden></p>
+          <div id="comparison" class="comparison-grid"></div>
+        </div>
         <div id="metrics" class="metrics" aria-label="Selected scenario metrics"></div>
       </section>
 

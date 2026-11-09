@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { groupRuns, parseJsonl, tally, traceFrames } = require('../../frontend/replay-data.js');
+const { groupRuns, parseJsonl, tally, traceFrames, scaleProposals, matchScaleProposals } = require('../../frontend/replay-data.js');
 require('../../frontend/demo-data.js');
 
 const row = {
@@ -55,4 +55,18 @@ test('a replay retains step zero, combines proposal and response, and includes t
   assert.deepEqual(frames.map(frame => frame.step), [0, 1, null]);
   assert.deepEqual(frames[1].events.map(event => event.event), ['model', 'request', 'gateway']);
   assert.equal(frames[2].events[0].status, 'FINISHED');
+});
+
+test('decision comparison matches the same requested scale across fixture namespaces', () => {
+  const [group] = groupRuns(globalThis.OPSGUARD_DEMO);
+  const [baseline, policy] = group.runs.map(run => scaleProposals(run.trace));
+  const matches = matchScaleProposals([baseline, policy]);
+  assert.deepEqual(matches.map(match => [match.name, match.replicas]), [['payments-api', 3], ['checkout-api', 3]]);
+  assert.deepEqual(matches[0].proposals.map(proposal => proposal.status), ['ALLOW', 'BLOCK']);
+  assert.deepEqual(matches[1].proposals.map(proposal => proposal.frameIndex), [2, 2]);
+  assert.deepEqual(matchScaleProposals([[baseline[0]], [policy[1]]]), []);
+  assert.equal(matchScaleProposals([baseline, [policy[0], { ...policy[0], status: 'ALLOW' }]])[0].proposals[1].status, 'BLOCK');
+  const wrongNamespace = group.runs[1].trace.map(event => event.request?.name === 'payments-api'
+    ? { ...event, request: { ...event.request, namespace: 'unexpected' } } : event);
+  assert.deepEqual(matchScaleProposals([baseline, scaleProposals(wrongNamespace)]).map(match => match.name), ['checkout-api']);
 });

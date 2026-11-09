@@ -1,16 +1,18 @@
 (() => {
   'use strict';
 
-  const { maxBytes, parseJsonl, groupRuns, tally, traceFrames, conditionLabel, label } = OpsGuardReplay;
+  const { maxBytes, parseJsonl, groupRuns, tally, traceFrames, scaleProposals, matchScaleProposals,
+    conditionLabel, label } = OpsGuardReplay;
   const byId = id => document.getElementById(id);
   const scenario = byId('scenario');
+  const proposalSelect = byId('comparison-proposal');
   const stepList = byId('step-list');
   const traceFile = byId('trace-file');
   const runSearch = byId('run-search');
   const demoName = 'Bundled kind demo';
   const pageSize = 10;
   const conditionDescriptions = new Map([
-    ['unprotected', 'Task policy bypassed'],
+    ['unprotected', 'Common lab bounds'],
     ['hardened', 'Prompt hardening'],
     ['task-policy', 'Task scope enforced'],
   ]);
@@ -31,6 +33,8 @@
   let datasetName = demoName;
   let demoLoaded = true;
   let selectedGroup;
+  let proposalsByRun = [];
+  let matchedProposals = [];
   let activeRun;
   let frames = [];
   let stepButtons = [];
@@ -76,6 +80,11 @@
 
   function replicaLabel(count) {
     return `${count} ${count === 1 ? 'replica' : 'replicas'}`;
+  }
+
+  function proposalLabel(proposal) {
+    const target = proposal.namespace ? `${proposal.namespace}/${proposal.name}` : proposal.name;
+    return `${target} → ${replicaLabel(proposal.replicas)}`;
   }
 
   function backendLabel(value) {
@@ -141,8 +150,32 @@
       element('span', 'meta-divider'), element('span', null, delivery));
     byId('condition-count').textContent = `${group.runs.length} ${group.runs.length === 1 ? 'condition' : 'conditions'}`;
     renderMetrics(group.runs);
-    byId('comparison').replaceChildren(...group.runs.map(runCard));
+    prepareComparison(group.runs);
     chooseRun(run ?? group.runs.find(candidate => candidate.condition === 'task-policy') ?? row);
+  }
+
+  function prepareComparison(runs) {
+    proposalsByRun = runs.map(row => scaleProposals(row.trace));
+    matchedProposals = matchScaleProposals(proposalsByRun);
+    proposalSelect.replaceChildren(...matchedProposals.map((proposal, index) => {
+      const option = element('option', null, proposalLabel(proposal));
+      option.value = index;
+      return option;
+    }));
+    const disagreement = matchedProposals.findIndex(match =>
+      new Set(match.proposals.map(proposal => proposal.status).filter(Boolean)).size > 1);
+    proposalSelect.value = String(Math.max(0, disagreement));
+    byId('proposal-controls').hidden = matchedProposals.length === 0;
+    const note = byId('proposal-note');
+    note.hidden = matchedProposals.length > 0 || runs.length < 2;
+    note.textContent = 'These runs have different proposals. Each card shows its first recorded scale proposal, when available.';
+    renderComparison();
+  }
+
+  function renderComparison() {
+    const match = matchedProposals[Number(proposalSelect.value)];
+    byId('comparison').replaceChildren(...selectedGroup.runs.map((row, index) =>
+      runCard(row, match?.proposals[index] ?? proposalsByRun[index][0])));
   }
 
   function renderMetrics(runs) {
@@ -172,7 +205,14 @@
     return [(row[field] !== inverted) ? 'good' : 'bad', row[field] ? positive : negative];
   }
 
-  function runCard(row) {
+  function decisionTone(status) {
+    if (status === 'ALLOW') return 'good';
+    if (status === 'BLOCK' || status === 'ESCALATE') return 'warn';
+    if (status === 'ERROR') return 'bad';
+    return 'neutral';
+  }
+
+  function runCard(row, proposal) {
     let [tone, status] = ['neutral', 'Recorded'];
     if (row.error) [tone, status] = ['warn', 'Run error'];
     else if (row.forbidden_seen === true) [tone, status] = ['bad', 'Forbidden effect observed'];
@@ -197,27 +237,29 @@
     const footer = element('div', 'run-card-footer');
     const elapsed = element('span', 'duration');
     elapsed.append(icon('clock'), element('span', null, duration(row.elapsed_ms)));
-    footer.append(elapsed, button('text-button', 'View trace', () => revealTrace(row), 'arrow'));
+    const inspect = button('text-button', proposal ? 'Inspect decision' : 'View trace',
+      () => revealTrace(row, proposal?.frameIndex), 'arrow');
+    inspect.setAttribute('aria-label', `${inspect.textContent} for ${conditionLabel(row.condition)}`);
+    footer.append(elapsed, inspect);
     card.append(header);
-    const proposal = traceFrames(row.trace).find(frame => frame.events.some(event => event.kind === 'action' && event.event === 'request'));
     if (proposal) {
-      const info = frameInfo(proposal);
-      const summary = element('div', 'proposal-summary');
+      const decision = proposal.status ?? 'Unrecorded';
+      const summary = element('div', `proposal-summary tone-${decisionTone(decision)}`);
       const target = element('div');
-      const replicas = info.request?.arguments?.replicas;
-      const requested = Number.isInteger(replicas) ? ` → ${replicaLabel(replicas)}` : '';
-      target.append(element('small', null, 'First action proposal'), element('strong', null, `${info.request?.name ?? info.title}${requested}`));
-      summary.append(target, badge(info.tone, info.state));
+      target.append(element('small', null, 'Gateway response'), element('strong', null, proposalLabel(proposal)));
+      if (proposal.reason) target.append(element('span', 'proposal-reason', label(proposal.reason.toLowerCase())));
+      summary.append(target, badge(decisionTone(decision), decision));
       card.append(summary);
     }
     card.append(outcomes, footer);
     return card;
   }
 
-  function revealTrace(row) {
+  function revealTrace(row, index = 0) {
     const group = groupByRun.get(row);
     if (group !== selectedGroup) chooseGroup(group, row);
     else chooseRun(row);
+    selectStep(index);
     jumpToTrace();
     byId('trace-conditions').querySelector('[aria-pressed="true"]')?.focus({ preventScroll: true });
   }
@@ -243,7 +285,7 @@
       const replicas = request?.arguments?.replicas;
       const subtitle = Number.isInteger(replicas) ? `${replicaLabel(replicas)} requested` : 'Action proposal';
       const state = result?.status ?? 'Proposed';
-      const tone = state === 'ALLOW' ? 'good' : state === 'BLOCK' || state === 'ESCALATE' ? 'warn' : 'neutral';
+      const tone = decisionTone(state);
       return { title, subtitle, result, request, state, tone };
     }
     if (requestEvent?.kind === 'read') {
@@ -436,6 +478,7 @@
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   });
   scenario.addEventListener('change', () => chooseGroup(groups[Number(scenario.value)]));
+  proposalSelect.addEventListener('change', renderComparison);
   byId('start-guided').addEventListener('click', () => {
     stopReplay();
     selectStep(0);

@@ -131,7 +131,16 @@ select { min-width: 0; min-height: 38px; padding: 7px 10px; border: 1px solid #d
 .section-heading .eyebrow { margin-bottom: 9px; }
 .section-heading > div > p:last-child { font-size: 13px; }
 .compare-heading { margin-top: 22px; }
-.comparison-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 14px; }
+#condition-count { flex: 0 0 auto; white-space: nowrap; }
+.comparison-workspace { overflow: hidden; border: 1px solid #d9e2f1; border-radius: 15px; background: #edf2f9; }
+.proposal-controls { display: flex; align-items: center; justify-content: space-between; gap: 10px 16px; padding: 13px 14px; border-bottom: 1px solid #d9e2f1; background: #f9fbff; }
+.proposal-control-copy { display: flex; align-items: center; gap: 10px; }
+.proposal-control-icon { display: grid; place-items: center; width: 34px; height: 34px; flex: 0 0 auto; border: 1px solid #cfddfc; border-radius: 9px; background: #eaf1ff; color: var(--blue-dark); }
+.proposal-control-copy label { color: var(--ink); font-size: 13px; font-weight: 750; }
+.proposal-control-copy p, .proposal-note { color: var(--muted); font-size: 12px; line-height: 1.4; }
+.proposal-controls select { width: min(100%, 250px); flex: 0 1 auto; }
+.proposal-note { padding: 12px 14px 0; }
+.comparison-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 11px; padding: 11px; }
 .run-card { min-width: 0; overflow: hidden; border: 1px solid var(--line); border-top: 3px solid #8c9fbc; border-radius: var(--radius); background: white; }
 .run-card.tone-good { border-top-color: #36a082; }
 .run-card.tone-bad { border-top-color: #d27380; }
@@ -139,10 +148,14 @@ select { min-width: 0; min-height: 38px; padding: 7px 10px; border: 1px solid #d
 .run-card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 15px 16px 12px; border-bottom: 1px solid #edf0f6; }
 .run-card-header h3 { margin-bottom: 2px; font-size: 17px; letter-spacing: -.025em; overflow-wrap: anywhere; }
 .run-card-header p { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
-.proposal-summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 12px 16px 0; padding: 8px 10px; border-left: 2px solid #a8bbdf; border-radius: 0 6px 6px 0; background: #f3f6fd; }
+.proposal-summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 12px 16px 0; padding: 8px 10px; border-left: 3px solid #a8bbdf; border-radius: 0 6px 6px 0; background: #f3f6fd; }
+.proposal-summary.tone-good { border-left-color: #68b79d; background: #eff8f3; }
+.proposal-summary.tone-warn { border-left-color: #d4a258; background: #fff8e9; }
+.proposal-summary.tone-bad { border-left-color: #d27380; background: #fdf2f4; }
 .proposal-summary > div { min-width: 0; }
 .proposal-summary small { display: block; margin-bottom: 3px; color: #526886; font-size: 10px; font-weight: 670; }
 .proposal-summary strong { display: block; color: #2b4266; font-family: var(--mono); font-size: 11px; font-weight: 650; overflow-wrap: anywhere; }
+.proposal-reason { display: block; margin-top: 3px; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
 .proposal-summary .badge { flex-shrink: 0; }
 .run-outcomes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin: 0; padding: 12px 16px; }
 .run-outcome { display: grid; gap: 3px; align-content: start; min-width: 0; padding: 9px 10px; border: 1px solid #ebeff6; border-radius: 8px; background: #f8fafe; }
@@ -239,6 +252,9 @@ td .badge { white-space: nowrap; }
   .metric-top { font-size: 11px; }
   .section-heading { align-items: flex-start; }
   .section-heading h2 { font-size: 20px; }
+  .proposal-controls { align-items: stretch; flex-direction: column; }
+  .proposal-controls select { width: 100%; }
+  .comparison-grid { padding: 8px; gap: 8px; }
   .trace-toolbar { align-items: flex-start; flex-direction: column; }
   .trace-body { grid-template-columns: minmax(0, 1fr); }
   .step-list { max-height: 172px; border-right: 0; border-bottom: 1px solid var(--line); }
