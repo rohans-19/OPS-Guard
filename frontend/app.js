@@ -439,46 +439,11 @@
   }
 
   function syncNavigation() {
-    const links = Array.from(document.querySelectorAll('.sidebar-nav a'));
-    const current = links.find(link => link.hash === location.hash) ?? links[0];
-    for (const link of links) {
-      if (link === current) link.setAttribute('aria-current', 'location');
+    const current = ['#replay', '#events', '#library'].includes(location.hash) ? location.hash : '#replay';
+    for (const link of document.querySelectorAll('.sidebar-nav a')) {
+      if (link.hash === current) link.setAttribute('aria-current', 'location');
       else link.removeAttribute('aria-current');
     }
-    byId('workspace-view').textContent = current.textContent.trim();
-  }
-
-  function renderJourney() {
-    const statusLabels = {
-      merged: ['good', 'Merged'],
-      verified: ['info', 'Verified'],
-      pilot: ['subtle', 'Pilot'],
-      next: ['warn', 'Next checkpoint'],
-      planned: ['subtle', 'Planned'],
-    };
-    const items = OPSGUARD_JOURNEY.map(milestone => {
-      const item = element('li', `journey-milestone journey-${milestone.status}`);
-      const date = element(milestone.date ? 'time' : 'span', 'journey-date', milestone.when);
-      if (milestone.date) date.dateTime = milestone.date;
-
-      const card = element('article', 'journey-card');
-      const header = element('div', 'journey-card-header');
-      header.append(element('h3', null, milestone.title), badge(...statusLabels[milestone.status]));
-      card.append(header, element('p', 'journey-owner', milestone.owner), element('p', 'journey-detail', milestone.detail));
-      if (milestone.links?.length) {
-        const links = element('div', 'journey-links');
-        for (const reference of milestone.links) {
-          const link = element('a', 'text-button', reference.label);
-          link.href = reference.href;
-          link.append(icon('arrow'));
-          links.append(link);
-        }
-        card.append(links);
-      }
-      item.append(date, card);
-      return item;
-    });
-    byId('journey-timeline').replaceChildren(...items);
   }
 
   byId('import-button').addEventListener('click', () => traceFile.click());
@@ -529,6 +494,5 @@
   byId('next-page').addEventListener('click', () => { page++; renderLibrary(); });
   window.addEventListener('hashchange', syncNavigation);
   syncNavigation();
-  renderJourney();
   setDataset(OPSGUARD_DEMO, demoName, true);
 })();

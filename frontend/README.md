@@ -31,11 +31,3 @@ From the repository root, run the tests with Node.js:
 ```powershell
 node --test tests/frontend/replay-data.test.cjs
 ```
-
-## Maintain the Project Journey
-
-Select **Project Journey** in the dashboard navigation. The timeline separates merged work, verified lab results, model pilots, and planned checkpoints.
-
-1. Edit [journey-data.js](journey-data.js) in the same PR as the milestone. Keep the records in chronological order. Add the date, status, owner, what happened, and an evidence link where one is available.
-2. Use `merged` once the change is on the target branch, `verified` for a check with recorded evidence, and `pilot` for a limited trial. Use `next` for the upcoming checkpoint and `planned` for later work. When a checkpoint happens, update that record and its evidence.
-3. Reload the dashboard and check the timeline and links. Use the [workstream handoff](../documentations/AGENT_WORKSTREAM_HANDOFF.md) for current integration owners and acceptance checks.

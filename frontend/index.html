@@ -3,13 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Follow the OpsGuard project journey and inspect recorded Kubernetes benchmark outcomes.">
+  <meta name="description" content="Inspect recorded OpsGuard benchmark runs and Kubernetes outcomes.">
   <title>OpsGuard | Replay console</title>
   <link rel="icon" href="mark.svg" type="image/svg+xml">
   <link rel="stylesheet" href="styles.css">
   <script defer src="demo-data.js"></script>
   <script defer src="replay-data.js"></script>
-  <script defer src="journey-data.js"></script>
   <script defer src="app.js"></script>
 </head>
 <body>
@@ -43,7 +42,6 @@
       <a href="#replay" aria-current="location"><svg class="icon"><use href="#i-layout"/></svg>Replay console</a>
       <a href="#events"><svg class="icon"><use href="#i-activity"/></svg>Event trace</a>
       <a href="#library"><svg class="icon"><use href="#i-stack"/></svg>Run library</a>
-      <a href="#journey"><svg class="icon"><use href="#i-clock"/></svg>Project Journey</a>
     </nav>
     <div class="sidebar-footer">
       <span class="workspace-status"><span class="status-dot"></span> Local workspace</span>
@@ -53,7 +51,7 @@
 
   <div class="workspace">
     <header class="topbar">
-      <div class="breadcrumb"><span>Benchmark lab</span><svg class="icon"><use href="#i-chevron"/></svg><strong id="workspace-view">Replay console</strong></div>
+      <div class="breadcrumb"><span>Benchmark lab</span><svg class="icon"><use href="#i-chevron"/></svg><strong>Replay console</strong></div>
       <div class="top-actions">
         <span class="badge badge-local"><span class="status-dot"></span> Offline replay</span>
         <button type="button" class="button button-primary" id="import-button"><svg class="icon"><use href="#i-upload"/></svg> Import JSONL</button>
@@ -155,18 +153,6 @@
           </div>
           <div class="library-footer"><span id="run-count" aria-live="polite"></span><div class="trace-pager"><button type="button" id="previous-page" class="button icon-button previous" aria-label="Previous page"><svg class="icon"><use href="#i-chevron"/></svg></button><button type="button" id="next-page" class="button icon-button" aria-label="Next page"><svg class="icon"><use href="#i-chevron"/></svg></button></div></div>
         </div>
-      </section>
-
-      <section id="journey" class="lower-section" aria-labelledby="journey-heading">
-        <div class="section-heading">
-          <div>
-            <p class="eyebrow"><span class="section-index">04</span> Project record</p>
-            <h2 id="journey-heading">Project Journey</h2>
-            <p>How the team moved from a shared plan to a live Kubernetes demonstration, and what comes next.</p>
-          </div>
-        </div>
-        <ol id="journey-timeline" class="journey-timeline" aria-label="Project milestones"></ol>
-        <noscript><p>Enable JavaScript to view the timeline.</p></noscript>
       </section>
 
       <footer class="page-footer"><span>OpsGuard Benchmark Lab</span><span>Recorded replay · Files are processed in this browser</span></footer>

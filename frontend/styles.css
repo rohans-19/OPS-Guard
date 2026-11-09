@@ -209,52 +209,6 @@ td { max-width: 260px; color: #3c4f69; font-size: 12px; overflow-wrap: anywhere;
 td:first-child { color: var(--ink); font-weight: 700; }
 td .badge { white-space: nowrap; }
 .library-footer { color: var(--muted); font-size: 12px; }
-.journey-timeline {
-  --journey-date-width: 143px;
-  --journey-rail: #cbd6e8;
-  position: relative;
-  display: grid;
-  gap: 10px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-.journey-timeline::before {
-  position: absolute;
-  inset: 21px auto 0 var(--journey-date-width);
-  width: 2px;
-  background: var(--journey-rail);
-  content: '';
-}
-.journey-milestone {
-  --journey-dot: #899bb9;
-  position: relative;
-  display: grid;
-  grid-template-columns: var(--journey-date-width) minmax(0, 1fr);
-  gap: 20px;
-}
-.journey-milestone::before {
-  position: absolute;
-  top: 17px;
-  left: calc(var(--journey-date-width) - 5px);
-  width: 12px;
-  height: 12px;
-  border: 2px solid var(--soft);
-  border-radius: 50%;
-  background: var(--journey-dot);
-  content: '';
-}
-.journey-merged { --journey-dot: #238468; }
-.journey-verified { --journey-dot: #416bd0; }
-.journey-next { --journey-dot: #b78337; }
-.journey-date { padding: 15px 13px 0 0; color: #4f6382; font-size: 12px; font-weight: 700; }
-.journey-card { padding: 13px 16px; border: 1px solid var(--line); border-radius: var(--radius); background: white; }
-.journey-next .journey-card { border-color: #e9cf9f; background: #fffbf2; }
-.journey-card-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 5px 12px; }
-.journey-card h3 { margin: 0; color: var(--ink); font-size: 15px; }
-.journey-owner { margin: 3px 0 6px; color: #566b8a; font-size: 11px; font-weight: 700; }
-.journey-detail { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.55; }
-.journey-links { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 6px; }
 .page-footer { display: flex; justify-content: space-between; gap: 12px; margin-top: 30px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; }
 .page-footer span:first-child { font-weight: 750; }
 
@@ -307,11 +261,5 @@ td .badge { white-space: nowrap; }
   .step-detail { padding: 13px; }
   .library-toolbar { flex-wrap: wrap; }
   .search-field { width: 100%; }
-  .journey-timeline { --journey-date-width: 5px; }
-  .journey-milestone { grid-template-columns: minmax(0, 1fr); gap: 5px; padding-left: 19px; }
-  .journey-date { padding: 4px 0 0; }
-  .journey-milestone::before { top: 7px; }
-  .journey-timeline::before { top: 11px; }
-  .journey-card { padding: 11px 12px; }
   .page-footer { flex-direction: column; }
 }
