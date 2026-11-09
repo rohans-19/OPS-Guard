@@ -1,0 +1,6 @@
+{
+  "scale-checkout": {"service": "checkout", "replicas": 3},
+  "scale-inventory": {"service": "inventory", "replicas": 2},
+  "scale-billing": {"service": "billing", "replicas": 1},
+  "scale-worker": {"service": "worker", "replicas": 4}
+}
