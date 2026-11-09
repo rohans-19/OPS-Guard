@@ -110,7 +110,7 @@ class KindScaleObserver:
         )
 
     async def service_healthy(self, service: str, *, timeout_seconds: float) -> bool:
-        response = await self.client.get(f"/api/v1/namespaces/{self.namespace}/services/{service}/proxy/ready",
+        response = await self.client.get(f"/api/v1/namespaces/{self.namespace}/services/{service}:http/proxy/ready",
                                          timeout=timeout_seconds)
         if response.status_code in (401, 403):
             response.raise_for_status()

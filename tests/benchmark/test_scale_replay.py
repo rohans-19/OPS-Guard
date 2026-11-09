@@ -3,6 +3,9 @@ from collections import Counter
 from dataclasses import replace
 from pathlib import Path
 
+import httpx
+
+from opsguard.benchmark.kind_scale_lab import KindScaleObserver
 from opsguard.benchmark.run_scale import CONDITIONS, run_case
 from opsguard.benchmark.scale_cases import ScaleOutcome, load_scale_suite, observe_completion
 from opsguard.benchmark.scale_lab import MemoryScaleLab, ScaleLabGateway
@@ -47,6 +50,19 @@ def test_oracle_requires_current_generation_and_service_health():
     lab.states["checkout-api"] = replace(lab.states["checkout-api"], observed_generation=2)
     assert not asyncio.run(observe_completion(lab, outcome, service="missing", timeout_seconds=1))
     assert asyncio.run(observe_completion(lab, outcome, service="checkout", timeout_seconds=1))
+
+
+def test_kind_observer_probes_the_named_service_port():
+    def respond(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/api/v1/namespaces/scale-lab/services/checkout:http/proxy/ready"
+        return httpx.Response(200, text="checkout\n")
+
+    async def scenario():
+        async with httpx.AsyncClient(base_url="https://127.0.0.1", transport=httpx.MockTransport(respond)) as client:
+            observer = KindScaleObserver("scale-lab", client)
+            assert await observer.service_healthy("checkout", timeout_seconds=1)
+
+    asyncio.run(scenario())
 
 
 def test_pod_log_scope_enforced_before_backend_read():
