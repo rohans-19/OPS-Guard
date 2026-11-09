@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Inspect recorded OpsGuard benchmark runs and Kubernetes outcomes.">
+  <title>OpsGuard | Replay console</title>
+  <link rel="icon" href="mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+  <script defer src="demo-data.js"></script>
+  <script defer src="replay-data.js"></script>
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <svg class="icon-library" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+    <symbol id="i-brand" viewBox="0 0 24 24"><path d="M12 2.5 21 6v5.4c0 5.1-3.5 8-9 10.1-5.5-2.1-9-5-9-10.1V6z"/><path d="M7.5 12h2.2l1.4-3.2 2.1 6.3 1.3-3.1h2"/></symbol>
+    <symbol id="i-layout" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 4v16M3 9h18"/></symbol>
+    <symbol id="i-activity" viewBox="0 0 24 24"><path d="M3 12h4l3-7 4 14 3-7h4"/></symbol>
+    <symbol id="i-stack" viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5Zm-9 9 9 5 9-5M3 16l9 5 9-5"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4m-4 4 4-4 4 4M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M4 12h15m-6-6 6 6-6 6"/></symbol>
+    <symbol id="i-terminal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3m6 0h4"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+    <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M10.3 4.7 3.2 17a1.7 1.7 0 0 0 1.5 2.5h14.6a1.7 1.7 0 0 0 1.5-2.5L13.7 4.7a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4m0 3h.01"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.4"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7V5Z"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M9 5v14m6-14v14"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="5.5"/><path d="m15 15 4 4"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v12m-4-4 4 4 4-4M4 16v4h16v-4"/></symbol>
+  </svg>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <aside class="sidebar">
+    <a class="brand" href="#replay" aria-label="OpsGuard replay console">
+      <span class="brand-mark"><svg class="icon"><use href="#i-brand"/></svg></span>
+      <span>OpsGuard<small>Benchmark lab</small></span>
+    </a>
+    <nav class="sidebar-nav" aria-label="Dashboard sections">
+      <p class="nav-label">Workspace</p>
+      <a href="#replay" aria-current="location"><svg class="icon"><use href="#i-layout"/></svg>Replay console</a>
+      <a href="#events"><svg class="icon"><use href="#i-activity"/></svg>Event trace</a>
+      <a href="#library"><svg class="icon"><use href="#i-stack"/></svg>Run library</a>
+    </nav>
+    <div class="sidebar-footer">
+      <span class="workspace-status"><span class="status-dot"></span> Local workspace</span>
+      <span class="workspace-caption">Phase 1 · Recorded evidence</span>
+    </div>
+  </aside>
+
+  <div class="workspace">
+    <header class="topbar">
+      <div class="breadcrumb"><span>Benchmark lab</span><svg class="icon"><use href="#i-chevron"/></svg><strong>Replay console</strong></div>
+      <div class="top-actions">
+        <span class="badge badge-local"><span class="status-dot"></span> Offline replay</span>
+        <button type="button" class="button button-primary" id="import-button"><svg class="icon"><use href="#i-upload"/></svg> Import JSONL</button>
+        <input type="file" id="trace-file" accept=".jsonl,.ndjson,text/plain,application/x-ndjson" hidden>
+      </div>
+    </header>
+
+    <main id="main" class="main-content" tabindex="-1">
+      <section id="replay" aria-labelledby="replay-heading">
+        <div class="page-heading">
+          <div>
+            <p class="eyebrow"><span class="section-index">01</span> Evaluation workspace</p>
+            <h1 id="replay-heading">Replay console</h1>
+            <p>Inspect what the agent proposed, what the gateway allowed, and what the observer verified.</p>
+          </div>
+          <label class="select-field" for="scenario"><span>Recorded scenario</span><select id="scenario"></select></label>
+        </div>
+
+        <p class="notice" id="import-notice" role="status" hidden></p>
+        <div class="scenario-banner">
+          <svg class="banner-graphic" width="440" height="202" viewBox="0 0 440 202" aria-hidden="true">
+            <defs><pattern id="dot-grid" width="18" height="18" patternUnits="userSpaceOnUse"><circle cx="2" cy="2" r="1.15" fill="#a3b9fb" opacity=".23"/></pattern><linearGradient id="grid-fade"><stop stop-color="#142b54" stop-opacity="0"/><stop offset="1" stop-color="#142b54" stop-opacity=".2"/></linearGradient></defs>
+            <path fill="url(#dot-grid)" d="M0 0h440v202H0z"/><path fill="url(#grid-fade)" d="M0 0h440v202H0z"/>
+            <path d="M79 103h63m63 0h39q12 0 12-12V64q0-12 12-12h48m-60 39v47q0 12 12 12h48" fill="none" stroke="#5c85df" stroke-width="1.7"/>
+            <path d="M350 52h50m-50 98h50" stroke="#7496eb" stroke-dasharray="4 6" opacity=".7"/>
+            <circle cx="79" cy="103" r="17" fill="#142b54" stroke="#80a7ff"/><path d="m73 100 4 3-4 3m7 0h5" fill="none" stroke="#b6ccff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <rect x="142" y="72" width="63" height="63" rx="15" fill="#193867" stroke="#678de4"/>
+            <path d="m174 84 15 6v10c0 9-5.5 14-15 19-9.5-5-15-10-15-19V90zm-8 17h4l2-5 4 10 2-5h4" fill="none" stroke="#ccdeff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+            <rect x="316" y="35" width="34" height="34" rx="9" fill="#25415e" stroke="#68c1b1"/><path d="m326 52 5 5 9-10" fill="none" stroke="#a0e9cd" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+            <rect x="316" y="133" width="34" height="34" rx="9" fill="#343658" stroke="#e0a0a7"/><path d="M329 146l8 8m0-8-8 8" stroke="#f6b7bb" stroke-width="1.6" stroke-linecap="round"/>
+            <circle cx="256" cy="103" r="3.5" fill="#a6c5ff"/>
+            <circle cx="400" cy="52" r="3" fill="#8dd8c2"/><circle cx="400" cy="150" r="3" fill="#e3a0a8"/>
+          </svg>
+          <div class="banner-content">
+            <div class="banner-labels"><span class="banner-badge" id="scenario-type"></span><span class="banner-badge" id="scenario-backend"></span></div>
+            <h2 id="scenario-title"></h2>
+            <p id="scenario-description"></p>
+            <div class="banner-controls">
+              <button type="button" id="start-guided" class="button button-guided"><svg class="icon"><use href="#i-play"/></svg> Play guided replay</button>
+              <div class="banner-meta" id="scenario-meta"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-heading compare-heading">
+          <div><h2>Condition comparison</h2><p>Compare the first action proposal with the final observed outcomes.</p></div>
+          <span class="badge badge-subtle" id="condition-count"></span>
+        </div>
+        <div id="comparison" class="comparison-grid"></div>
+        <div id="metrics" class="metrics" aria-label="Selected scenario metrics"></div>
+      </section>
+
+      <section id="events" class="lower-section" aria-labelledby="events-heading">
+        <div class="section-heading">
+          <div><p class="eyebrow"><span class="section-index">02</span> Decision trace</p><h2 id="events-heading">Event trace</h2><p>Follow the evidence, proposals, and gateway responses in recorded order.</p></div>
+          <button type="button" id="play-replay" class="button button-primary"><svg class="icon"><use href="#i-play"/></svg> Play replay</button>
+        </div>
+        <div class="trace-panel">
+          <div class="trace-toolbar">
+            <div class="condition-tabs" id="trace-conditions" aria-label="Replay condition"></div>
+            <div class="trace-pager">
+              <button type="button" class="button icon-button previous" id="previous-step" aria-label="Previous event"><svg class="icon"><use href="#i-chevron"/></svg></button>
+              <span id="step-counter" aria-live="polite"></span>
+              <button type="button" class="button icon-button" id="next-step" aria-label="Next event"><svg class="icon"><use href="#i-chevron"/></svg></button>
+            </div>
+          </div>
+          <div class="trace-body">
+            <ol class="step-list" id="step-list" aria-label="Recorded events"></ol>
+            <article class="step-detail" id="step-detail" aria-label="Selected event"></article>
+          </div>
+        </div>
+      </section>
+
+      <section id="library" class="lower-section" aria-labelledby="library-heading">
+        <div class="section-heading">
+          <div><p class="eyebrow"><span class="section-index">03</span> Recorded dataset</p><h2 id="library-heading">Run library</h2><p id="dataset-description"></p></div>
+          <button type="button" class="button button-secondary" id="restore-demo" hidden>Restore demo</button>
+        </div>
+        <div class="library-panel">
+          <div class="library-toolbar">
+            <label class="search-field"><svg class="icon"><use href="#i-search"/></svg><input type="search" id="run-search" placeholder="Search case, model or condition" aria-label="Search runs"></label>
+            <button type="button" class="button button-secondary" id="export-data"><svg class="icon"><use href="#i-download"/></svg> Export JSONL</button>
+          </div>
+          <div class="table-scroll" tabindex="0" role="region" aria-label="Run results table">
+            <table>
+              <thead><tr><th scope="col">Case</th><th scope="col">Condition</th><th scope="col">Backend</th><th scope="col">Model</th><th scope="col">Completion</th><th scope="col">Forbidden effect</th><th scope="col"><span class="sr-only">Inspect trace</span></th></tr></thead>
+              <tbody id="run-table"></tbody>
+            </table>
+          </div>
+          <div class="library-footer"><span id="run-count" aria-live="polite"></span><div class="trace-pager"><button type="button" id="previous-page" class="button icon-button previous" aria-label="Previous page"><svg class="icon"><use href="#i-chevron"/></svg></button><button type="button" id="next-page" class="button icon-button" aria-label="Next page"><svg class="icon"><use href="#i-chevron"/></svg></button></div></div>
+        </div>
+      </section>
+
+      <footer class="page-footer"><span>OpsGuard Benchmark Lab</span><span>Recorded replay · Files are processed in this browser</span></footer>
+    </main>
+  </div>
+</body>
+</html>
