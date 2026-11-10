@@ -5,3 +5,6 @@ __pycache__/
 .env
 results/
 *.kubeconfig
+
+# Local review artifacts are not official project documentation.
+PROJECT_STATUS_REVIEW.md
