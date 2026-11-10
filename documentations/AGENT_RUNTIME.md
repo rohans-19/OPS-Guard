@@ -2,6 +2,8 @@
 
 This workstream provides the agent loop, shared proposal envelope, Deployment scale handler, scripted and local model adapters, pod-log evidence, and the scale case suite. It targets the November 13 Phase 1 checkpoint. It also supplies a standalone kind pilot so the team can exercise the operation before the shared gateway and runner are available.
 
+The current `task-policy` implementation uses the shared authorization and target resolver described in [Task authorization and image updates](AUTHORIZATION_AND_IMAGES.md). The historical live results below predate that integration; the updated live path needs a new kind acceptance run.
+
 ## Run the verified local slice
 
 From the repository root, use Python 3.10 or newer. The workstream was tested with Python 3.12.
@@ -26,9 +28,9 @@ Both scripts read checkout's logs, propose payments at three replicas, then prop
 ## Shared interfaces
 
 - **Agent/policy:** `opsguard.contracts.ActionRequest` is the five-field envelope used in the team plan. Verb/resource combinations are checked in the envelope; a registered handler validates its own arguments. `ScaleAction` requires a real integer, rejects extra fields, and targets one Deployment. Task identity comes from the trusted invocation, never from the model output.
-- **Agent/gateway:** `Gateway.read` and `Gateway.propose` receive typed requests and separate `task_id` and remaining timeout. Gateway statuses and reason codes are fed back to the model. The loop has no Kubernetes client and cannot execute shell commands.
+- **Agent/gateway:** `Gateway.read` and `Gateway.propose` receive typed requests and separate `task_id` and remaining timeout. Proposals may carry task-scoped observation references for diagnostics. The loop accepts typed scale and image actions; each gateway rejects operations it does not implement. Gateway statuses and reason codes are fed back to the model. The loop has no Kubernetes client and cannot execute shell commands.
 - **Executor:** `prepare_scale(action, target=..., lab_bounds=...)` returns an immutable `PreparedScale` with the Scale API method, fixed path and body, UID, and resourceVersion. The trusted executor supplies the target and lab bounds. Preview passes `dryRun=All`; execute reuses the same body. The shared executor should bind its decision to that exact preparation and independently handle expiry/conflict.
-- **Evidence:** `read_pod_evidence` checks the requested scope, accepts a gateway-resolved Pod reference, reads a bounded excerpt, and emits an observation ID, provenance metadata, hash, and untrusted text. The standalone resolver uses fixture labels; the shared resolver must implement the team's live Service/owner verification. Read permission is independent of write permission.
+- **Evidence:** `read_pod_evidence` checks the requested scope, accepts a gateway-resolved Pod reference, reads a bounded excerpt, and emits a shared evidence record with source metadata, hash, and untrusted text. The live log backend verifies Pod ownership, and guarded scale proposals use Service/EndpointSlice/owner-chain target resolution. Read permission is independent of write permission.
 - **Benchmark:** `benchmark/cases/scale` contains fixture workloads, independent trusted intent inputs, and scoring cases. Oracle labels do not enter the gateway. The per-case observer checks desired replicas, the current observed Deployment generation, ready replicas, and Service response identity.
 - **Model:** `ModelAdapter.complete(messages, schema=..., timeout_seconds=...)` is shared by `ScriptedModel` and `OllamaModel`. An external cancellation event or deadline stops cooperative adapters. A timed-out or cancelled action may already have committed; its trace marks the outcome uncertain and the agent does not retry it.
 
