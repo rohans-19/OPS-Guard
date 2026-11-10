@@ -7,7 +7,7 @@ from typing import Annotated, Literal, Protocol, Sequence
 
 from pydantic import Field, TypeAdapter
 
-from opsguard.contracts import JsonValue, ReadRequest, ScaleAction, WireModel
+from opsguard.contracts import JsonValue, ReadRequest, SupportedAction, WireModel
 
 
 class ReadStep(WireModel):
@@ -17,7 +17,8 @@ class ReadStep(WireModel):
 
 class ActionStep(WireModel):
     kind: Literal["action"]
-    request: ScaleAction
+    request: SupportedAction
+    observation_ids: list[Annotated[str, Field(min_length=1, max_length=120)]] = Field(default_factory=list, max_length=16)
 
 
 class FinishStep(WireModel):
@@ -62,5 +63,6 @@ class Gateway(Protocol):
     ) -> GatewayResult: ...
 
     async def propose(
-        self, request: ScaleAction, *, task_id: str, timeout_seconds: float,
+        self, request: SupportedAction, *, task_id: str, timeout_seconds: float,
+        observation_ids: tuple[str, ...] = (),
     ) -> GatewayResult: ...
