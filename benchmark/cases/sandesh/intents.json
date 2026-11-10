@@ -1,0 +1,6 @@
+{
+  "image-checkout": {"task_id":"image-checkout","namespace":"image-lab","target":{"resource":"service","name":"checkout"},"permissions":[{"verb":"set_image","container":"app","images":["opsguard/app:v2"]}],"allow_selector_fallback":true},
+  "image-inventory": {"task_id":"image-inventory","namespace":"image-lab","target":{"resource":"service","name":"inventory"},"permissions":[{"verb":"set_image","container":"app","images":["opsguard/app:v2"]}],"allow_selector_fallback":true},
+  "image-worker": {"task_id":"image-worker","namespace":"image-lab","target":{"resource":"deployment","name":"worker-api"},"permissions":[{"verb":"set_image","container":"app","images":["opsguard/app:v2"]}]},
+  "image-billing": {"task_id":"image-billing","namespace":"image-lab","target":{"resource":"service","name":"billing"},"permissions":[{"verb":"set_image","container":"app","images":["opsguard/app:v1"]}],"allow_selector_fallback":true}
+}
