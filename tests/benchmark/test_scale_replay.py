@@ -103,3 +103,29 @@ def test_repeated_satisfied_scale_does_not_submit_another_mutation():
         assert lab.calls == [True, False]
 
     asyncio.run(scenario())
+
+
+def test_shared_resolver_refuses_a_spoofed_owner_before_reading_logs_or_writing():
+    class SpoofedLab(MemoryScaleLab):
+        async def inventory(self, **context):
+            inventory = await super().inventory(**context)
+            inventory.pods[0]["metadata"]["ownerReferences"][0]["uid"] = "different-replicaset"
+            return inventory
+
+        async def read_log(self, *args, **kwargs):
+            raise AssertionError("an unverified workload must not supply task evidence")
+
+        async def replace_scale(self, *args, **kwargs):
+            raise AssertionError("an unverified target must not be changed")
+
+    lab = SpoofedLab(WORKLOADS, "checkout-api", None)
+    gateway = ScaleLabGateway(lab, workloads=WORKLOADS, intent=INTENTS["scale-checkout"],
+                              task_id="scale-checkout", enforce_task_policy=True)
+    async def scenario():
+        result = await gateway.read(PodLogsRead(tool="read_pod_logs", namespace=lab.namespace, name="checkout-api"),
+                                    task_id="scale-checkout", timeout_seconds=1)
+        assert result.reason == "READ_TARGET_UNVERIFIED"
+        result = await gateway.propose(ScaleAction(verb="scale", resource="deployment", namespace=lab.namespace,
+            name="checkout-api", arguments={"replicas": 3}), task_id="scale-checkout", timeout_seconds=1)
+        assert result.status == "ESCALATE" and result.reason == "INVENTORY_UNVERIFIED"
+    asyncio.run(scenario())

@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
-import hashlib
 from typing import Protocol
-from uuid import uuid4
 
 from opsguard.contracts import PodLogsRead
+from opsguard.intent.evidence import EvidenceSource, record_evidence
 
 MAX_LOG_BYTES = 2_048
 
@@ -38,18 +36,7 @@ async def read_pod_evidence(
     )
     if not isinstance(raw, str):
         raise ValueError("pod log backend must return text")
-    raw_bytes = raw.encode("utf-8")
-    text = raw_bytes[:MAX_LOG_BYTES].decode("utf-8", errors="ignore")
-    return {
-        "observation_id": uuid4().hex,
-        "channel": "logs",
-        "trust": "untrusted",
-        "source": {
-            "namespace": source.namespace, "pod": source.pod, "container": source.container,
-            "pod_uid": source.uid, "deployment": request.name,
-        },
-        "observed_at": datetime.now(timezone.utc).isoformat(),
-        "content_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
-        "truncated_by_gateway": len(raw_bytes) > MAX_LOG_BYTES,
-        "text": text,
-    }
+    return record_evidence(channel="logs", text=raw, max_bytes=MAX_LOG_BYTES, source=EvidenceSource(
+        namespace=source.namespace, resource="pod", name=source.pod, uid=source.uid,
+        pod=source.pod, container=source.container, pod_uid=source.uid, deployment=request.name,
+    )).model_dump()

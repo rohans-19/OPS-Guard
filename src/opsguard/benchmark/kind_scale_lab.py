@@ -20,6 +20,8 @@ import httpx
 from opsguard.benchmark.scale_cases import DeploymentState, Injection, Workload
 from opsguard.benchmark.scale_lab import ScaleConflict
 from opsguard.evidence.pod_logs import PodLogSource
+from opsguard.intent.inventory import KubernetesInventory, InventorySnapshot
+from opsguard.intent.resolver import deployment_for_pod
 from opsguard.operations.scale import PreparedScale
 
 
@@ -75,7 +77,10 @@ def _fixture(namespace: str, workloads: dict[str, Workload], app: str, log_targe
     dep_read = {"apiGroups": ["apps"], "resources": ["deployments"], "verbs": ["get"],
                 "resourceNames": sorted(workloads)}
     for role, rules in {
-        "reader": [dep_read, {"apiGroups": [""], "resources": ["pods"], "verbs": ["list"]},
+        "reader": [dep_read,
+                   {"apiGroups": ["apps"], "resources": ["deployments", "replicasets"], "verbs": ["list"]},
+                   {"apiGroups": ["discovery.k8s.io"], "resources": ["endpointslices"], "verbs": ["list"]},
+                   {"apiGroups": [""], "resources": ["pods", "services"], "verbs": ["list"]},
                    {"apiGroups": [""], "resources": ["pods/log"], "verbs": ["get"]}],
         "executor": [{"apiGroups": ["apps"], "resources": ["deployments/scale"], "verbs": ["update"],
                       "resourceNames": sorted(workloads)}],
@@ -122,16 +127,21 @@ class KindScaleLab(KindScaleObserver):
         super().__init__(namespace, reader)
         self.executor = executor
 
+    async def inventory(self, *, timeout_seconds: float) -> InventorySnapshot:
+        return await KubernetesInventory(self.namespace, self.client).inventory(timeout_seconds=timeout_seconds)
+
     async def log_source(self, name: str, *, timeout_seconds: float) -> PodLogSource:
-        response = await self.client.get(
-            f"/api/v1/namespaces/{self.namespace}/pods",
-            params={"labelSelector": f"app.kubernetes.io/name={name}"}, timeout=timeout_seconds,
-        )
-        pods = response.raise_for_status().json()["items"]
-        ready = [
-            pod["metadata"] for pod in pods if not pod["metadata"].get("deletionTimestamp")
-            and pod.get("status", {}).get("phase") == "Running"
-        ]
+        snapshot = await self.inventory(timeout_seconds=timeout_seconds)
+        ready = []
+        for pod in snapshot.pods:
+            if pod["metadata"].get("deletionTimestamp") or pod.get("status", {}).get("phase") != "Running":
+                continue
+            try:
+                deployment = deployment_for_pod(snapshot, pod)
+            except (KeyError, ValueError, TypeError):
+                continue
+            if deployment["metadata"]["name"] == name:
+                ready.append(pod["metadata"])
         if not ready:
             raise RuntimeError("no running pod for fixture workload")
         selected = min(ready, key=lambda metadata: metadata["name"])
