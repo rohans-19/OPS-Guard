@@ -53,6 +53,25 @@ class ScaleAction(ActionRequest):
     arguments: ScaleArguments
 
 
+ImageReference = Annotated[str, StringConstraints(
+    min_length=1, max_length=512, pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._/@:+-]*$",
+)]
+
+
+class ImageArguments(WireModel):
+    container: DnsLabel
+    image: ImageReference
+
+
+class SetImageAction(ActionRequest):
+    verb: Literal["set_image"]
+    resource: Literal["deployment"]
+    arguments: ImageArguments
+
+
+SupportedAction = Annotated[ScaleAction | SetImageAction, Field(discriminator="verb")]
+
+
 class DeploymentRead(WireModel):
     tool: Literal["get_deployment"]
     namespace: DnsLabel
@@ -68,7 +87,14 @@ class PodLogsRead(WireModel):
     tail_lines: int = Field(default=20, ge=1, le=50)
 
 
-ReadRequest = Annotated[DeploymentRead | PodLogsRead, Field(discriminator="tool")]
+class RunbookRead(WireModel):
+    tool: Literal["read_runbook"]
+    namespace: DnsLabel
+    name: ObjectName
+    runbook_id: DnsLabel
+
+
+ReadRequest = Annotated[DeploymentRead | PodLogsRead | RunbookRead, Field(discriminator="tool")]
 
 
 def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
