@@ -156,8 +156,9 @@ HTTP tests use mocked transports. The updated live scale adapter and live image
 adapter still need an opt-in kind acceptance run before claiming live verification
 of this implementation.
 
-The remaining team integration is the shared impact-aware gateway/executor and
-common runner. Sandesh's later evaluation work includes fixed independently
+The [shared executor](EXECUTOR_AND_RESTART.md) now registers the scale, image and
+restart handlers. The restart runner connects the impact estimator to that gateway.
+The image runner above still uses its standalone gateway. Sandesh's later evaluation work includes fixed independently
 labeled proposal sets, policy/provenance ablations with Vikas, both models across
 all four conditions, and separate false-block, escalation and F1 reporting.
 

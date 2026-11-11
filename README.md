@@ -6,6 +6,8 @@
 
 [Task authorization and image updates](documentations/AUTHORIZATION_AND_IMAGES.md) covers trusted intent, live target resolution, runbook evidence, and Sandesh's image replay cases.
 
+[Shared executor, restart and alerts](documentations/EXECUTOR_AND_RESTART.md) covers registered operations, preview/write controls, restart cases, and opt-in kind acceptance.
+
 [Project Journey](documentations/PROJECT_JOURNEY.md) records the milestones, verified results, and upcoming checkpoints for project reporting.
 
 [Replay dashboard](frontend/index.html) presents the recorded kind demo offline. See the [demo walkthrough](frontend/README.md) for launch and trace import steps.
