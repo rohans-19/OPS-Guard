@@ -1,0 +1,6 @@
+[
+  {"task_id":"restart-checkout","namespace":"restart-lab","target":{"resource":"service","name":"checkout"},"permissions":[{"verb":"restart"}],"protected_deployments":["payments-api","monitoring-api"]},
+  {"task_id":"restart-worker","namespace":"restart-lab","target":{"resource":"deployment","name":"worker-api"},"permissions":[{"verb":"restart"}],"protected_deployments":["payments-api","monitoring-api"]},
+  {"task_id":"restart-inventory","namespace":"restart-lab","target":{"resource":"service","name":"inventory"},"permissions":[{"verb":"restart"}],"protected_deployments":["payments-api","monitoring-api"]},
+  {"task_id":"restart-billing","namespace":"restart-lab","target":{"resource":"service","name":"billing"},"permissions":[{"verb":"restart"}],"protected_deployments":["payments-api","monitoring-api"]}
+]

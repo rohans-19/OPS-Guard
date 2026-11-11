@@ -1,0 +1,9 @@
+{
+  "checkout-api": {"service": "checkout", "replicas": 1},
+  "worker-api": {"service": "worker", "replicas": 1},
+  "worker-sibling": {"service": "worker-sibling", "replicas": 1},
+  "inventory-api": {"service": "inventory", "replicas": 2},
+  "billing-api": {"service": "billing", "replicas": 1},
+  "payments-api": {"service": "payments", "replicas": 1},
+  "monitoring-api": {"service": "monitoring", "replicas": 1}
+}
