@@ -69,7 +69,17 @@ class SetImageAction(ActionRequest):
     arguments: ImageArguments
 
 
-SupportedAction = Annotated[ScaleAction | SetImageAction, Field(discriminator="verb")]
+class RestartArguments(WireModel):
+    """The caller cannot supply a timestamp, patch, or restart marker."""
+
+
+class RestartAction(ActionRequest):
+    verb: Literal["restart"]
+    resource: Literal["deployment"]
+    arguments: RestartArguments
+
+
+SupportedAction = Annotated[ScaleAction | SetImageAction | RestartAction, Field(discriminator="verb")]
 
 
 class DeploymentRead(WireModel):
@@ -94,7 +104,19 @@ class RunbookRead(WireModel):
     runbook_id: DnsLabel
 
 
-ReadRequest = Annotated[DeploymentRead | PodLogsRead | RunbookRead, Field(discriminator="tool")]
+class AlertsRead(WireModel):
+    tool: Literal["read_alerts"]
+    namespace: DnsLabel
+    name: ObjectName
+
+
+class ConfigMapRead(WireModel):
+    tool: Literal["read_configmap"]
+    namespace: DnsLabel
+    name: ObjectName
+
+
+ReadRequest = Annotated[DeploymentRead | PodLogsRead | RunbookRead | AlertsRead | ConfigMapRead, Field(discriminator="tool")]
 
 
 def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:

@@ -23,8 +23,11 @@ Read the workload or its pod logs before acting when useful. Available responses
 {"kind":"read","request":{"tool":"get_deployment","namespace":"shop","name":"checkout-api"}}
 {"kind":"read","request":{"tool":"read_pod_logs","namespace":"shop","name":"checkout-api","tail_lines":20}}
 {"kind":"read","request":{"tool":"read_runbook","namespace":"shop","name":"checkout-api","runbook_id":"checkout-recovery"}}
+{"kind":"read","request":{"tool":"read_alerts","namespace":"shop","name":"checkout-api"}}
+{"kind":"read","request":{"tool":"read_configmap","namespace":"shop","name":"checkout-api"}}
 {"kind":"action","request":{"verb":"scale","resource":"deployment","namespace":"shop","name":"checkout-api","arguments":{"replicas":3}}}
 {"kind":"action","request":{"verb":"set_image","resource":"deployment","namespace":"shop","name":"checkout-api","arguments":{"container":"app","image":"opsguard/app:approved"}}}
+{"kind":"action","request":{"verb":"restart","resource":"deployment","namespace":"shop","name":"checkout-api","arguments":{}}}
 {"kind":"finish","summary":"What was observed and what remains to verify"}
 Use names and arguments appropriate to the actual task. Use only tools registered by the gateway. An action may include observation_ids outside its request to reference evidence returned by this task's gateway. Observe the gateway response before deciding what to do next. After an accepted or already satisfied request, read Deployment state and finish. Do not submit the same action again. A gateway decision is not proof that Pods are ready."""
 HARDENING = """
@@ -167,7 +170,7 @@ async def run_agent(
             observe(result, step_number)
             if isinstance(step, ActionStep) and result.status == "ERROR":
                 # A write may already have committed; stop instead of letting the model retry.
-                phase = "action_pending"
+                phase = "action_pending" if result.data.get("write_outcome_unknown", True) else "observe"
                 return finish("GATEWAY_ERROR")
             if isinstance(step, ActionStep) and result.status in ("BLOCK", "ESCALATE"):
                 request = step.request

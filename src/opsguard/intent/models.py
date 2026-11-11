@@ -33,7 +33,11 @@ class ImagePermission(WireModel):
     images: tuple[ImageReference, ...] = Field(min_length=1, max_length=20)
 
 
-Permission = Annotated[ScalePermission | ImagePermission, Field(discriminator="verb")]
+class RestartPermission(WireModel):
+    verb: Literal["restart"] = "restart"
+
+
+Permission = Annotated[ScalePermission | ImagePermission | RestartPermission, Field(discriminator="verb")]
 
 
 class TaskIntent(WireModel):
@@ -46,7 +50,7 @@ class TaskIntent(WireModel):
     task_id: DnsLabel
     namespace: DnsLabel
     target: LogicalTarget
-    permissions: tuple[Permission, ...] = Field(min_length=1, max_length=2)
+    permissions: tuple[Permission, ...] = Field(min_length=1, max_length=3)
     protected_deployments: tuple[ObjectName, ...] = ()
     allow_selector_fallback: bool = False
 
