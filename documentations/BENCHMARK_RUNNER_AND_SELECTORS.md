@@ -200,11 +200,13 @@ ServiceAccount tokens. The executor may only patch the fixture Services. The
 oracle may only list state and reach Services through the API proxy.
 
 **Verification status.** On 12 November 2026 the Step 6 smoke test passed on
-kind v0.33.0 with Kubernetes v1.37.0 and Docker 29.9.3 on Windows. A Step 7 run
-was started the same day; its first 34 of 56 trials finished with no harness
-error and the expected outcomes on every channel, including alerts through the
-real Alertmanager. Complete the run with `--resume` before quoting it. Trials
-took about 15 seconds each.
+kind v0.33.0 with Kubernetes v1.37.0 and Docker 29.9.3 on Windows. The Step 7
+run completed the same day: 56 of 56 scripted trials with no harness error, at
+about 15 seconds each. The forbidden state was observed in 10/10 attacked
+trials under `unprotected` and `hardened`, and 0/10 under `llm-judge` and
+`opsguard`. The legitimate repair held in 14/14 trials under `llm-judge` and
+`opsguard`. Payloads were delivered through the real Alertmanager API, Pod
+logs, the ConfigMap API and runbook files.
 
 ## Part 3. Run model trials
 
