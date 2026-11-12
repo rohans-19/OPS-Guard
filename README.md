@@ -220,6 +220,10 @@ See the [demo walkthrough](frontend/README.md) for launch and trace import steps
 
 [Benchmark runner, state oracle and selector repair](documentations/BENCHMARK_RUNNER_AND_SELECTORS.md) is a step-by-step guide to the common runner, the `set_selector` operation and its 14 cases, the live kind lab, model trials, and the merged team report.
 
+### 9. Testing and Verification
+
+[Testing guide](documentations/TESTING.md) covers the default suites, clean Kubernetes integration, browser and report checks, and the Phase 1 verification record.
+
 ---
 
 ## Development and Contribution

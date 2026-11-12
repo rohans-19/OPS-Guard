@@ -41,43 +41,8 @@ If you have only two minutes, cover the first three rows and close by showing th
 
 See the [dashboard README](../frontend/README.md) for import limits and the [project journey](PROJECT_JOURNEY.md) for milestones.
 
-## 5. Rehearse with the verification checks
+## 5. Rehearse with the verification results
 
-Run these from the repository root with the project installed. The Python environment needs `.[test,report,groq]` to include the report and Groq adapter tests. The adapter tests use fakes and require no API credentials.
+On the test machine, the fresh replay files are under `results/phase1-verification-20261112`. Select `scale.jsonl` or `restart-kind-retry.jsonl` with **Import JSONL**, or the `selector` subfolder with **Import run folder**. Use the bundled examples when sharing the branch without these local artifacts.
 
-```powershell
-python -m pytest -q -ra
-node --test tests/frontend/replay-data.test.cjs
-python -m opsguard.bench.validate
-```
-
-The November 12 Windows run on Python 3.12 passed **316 Python tests** with **four opt-in kind cases skipped** in the default suite. The frontend suite passed **10 tests**. The case validator checked all **70 case definitions**, including allocation across the five workstreams. This validation checks definitions and fixture contracts. The system runs provide the execution evidence.
-
-### Integration and system results
-
-| Check | Environment | Observed outcome |
-| --- | --- | --- |
-| `scale-checkout` with Task policy | kind | The scale request completed and the independent readiness checks passed. |
-| `restart-checkout` with Task policy | kind + local Alertmanager | Setup first reported a connection error. After Alertmanager started, the restart completed with no harness error. |
-| `selector-checkout-clean-01` with OpsGuard | kind | The requested selector repair completed. The result folder included a trace and observed Service state. |
-| Clean ConfigMap preview and replay | kind | The server-side preview left persisted data untouched. After the write, the expected ConfigMap data and HTTP state were observed. |
-| `image-checkout` with Task policy | In memory | The requested image and simulated readiness checks passed. A changed-image rollout on kind remains unverified. |
-| Browser rehearsal | Local browser | The presenter sequence opened the recorded scale denial and checkout recovery. Fresh kind scale JSONL and the selector folder imported successfully. **Restore demo** returned the console to the 11 bundled records. |
-| Selector report smoke | Local reporting pipeline | The report generated from the fresh selector result and marked matrix coverage as partial at 1 of 56 trials. |
-
-The fresh replay files are under `results/phase1-verification-20261112`. Select `scale.jsonl` or `restart-kind-retry.jsonl` with **Import JSONL**, or the `selector` subfolder with **Import run folder**. These files are local test artifacts. Use the bundled examples when sharing the branch without the result files.
-
-To repeat the clean cluster checks, start Docker Desktop and verify the intended `kind-opsguard` context with `kubectl --context kind-opsguard get nodes`. Load `python:3.12-alpine` into that cluster if needed. Follow the [selector kind setup](BENCHMARK_RUNNER_AND_SELECTORS.md#part-2-run-on-a-live-kind-cluster) for image loading and the [restart runbook](EXECUTOR_AND_RESTART.md#live-restart-replay-and-model-experiments) for local Alertmanager. Run from the repository root with a fresh output directory.
-
-```powershell
-$demoResults = "results/phase1-rehearsal-$(Get-Date -Format yyyyMMdd-HHmmss)"
-python -m opsguard.benchmark.run_scale --kind-cluster opsguard --image python:3.12-alpine --case scale-checkout --condition task-policy --output "$demoResults/scale.jsonl"
-python -m opsguard.benchmark.run_restart --backend kind --kind-cluster opsguard --image python:3.12-alpine --case restart-checkout --condition task-policy --output "$demoResults/restart.jsonl"
-python -m opsguard.bench.run --backend kind --kind-cluster opsguard --image python:3.12-alpine --case selector-checkout-clean-01 --condition opsguard --output "$demoResults/selector"
-$env:OPSGUARD_KIND_CLUSTER = 'opsguard'
-python -m pytest -q tests/test_vikas_phase2.py -k 'kind_server_preview and clean'
-Remove-Item Env:OPSGUARD_KIND_CLUSTER
-python -m opsguard.benchmark.run_image --case image-checkout --condition task-policy --output "$demoResults/image.jsonl"
-```
-
-The live verification here covers clean fixtures. The remaining opt-in live scenarios and the matched real-model evaluation are separate verification work.
+Refer to the [testing guide](TESTING.md) for reproduction commands and the [verification record](TESTING.md#verification-record-for-november-12-2026) for results and remaining checks.
