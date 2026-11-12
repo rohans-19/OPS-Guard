@@ -527,8 +527,9 @@
       setDataset(imported, name);
       const missing = imported.filter(row => row.trace_ref && !row.trace.length).length;
       let message = `Loaded ${imported.length} ${imported.length === 1 ? 'run' : 'runs'} from ${name}.`;
-      if (attached) message += ` Attached ${attached} trace files.`;
-      if (missing) message += ` ${missing} runs have summaries only.`;
+      if (attached) message += ` Attached ${attached} ${attached === 1 ? 'trace file' : 'trace files'}.`;
+      if (missing === 1) message += ' 1 run has a summary only.';
+      if (missing > 1) message += ` ${missing} runs have summaries only.`;
       notice(message);
       if (folder) {
         window.location.hash = 'replay';
