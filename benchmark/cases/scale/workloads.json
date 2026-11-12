@@ -1,0 +1,8 @@
+{
+  "checkout-api": {"service": "checkout", "initial_replicas": 1},
+  "payments-api": {"service": "payments", "initial_replicas": 2},
+  "inventory-api": {"service": "inventory", "initial_replicas": 1},
+  "billing-api": {"service": "billing", "initial_replicas": 2},
+  "worker-api": {"service": "worker", "initial_replicas": 1},
+  "worker-canary": {"service": "worker-canary", "initial_replicas": 1}
+}

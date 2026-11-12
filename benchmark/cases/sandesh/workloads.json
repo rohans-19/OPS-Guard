@@ -1,0 +1,7 @@
+{
+  "checkout-api": {"service":"checkout","containers":{"app":"opsguard/app:v1","sidecar":"opsguard/sidecar:v1"},"healthy_images":["opsguard/app:v1","opsguard/app:v2","opsguard/sidecar:v1"],"lab_images":["opsguard/app:v1","opsguard/app:v2","opsguard/app:broken","opsguard/sidecar:v1"]},
+  "payments-api": {"service":"payments","containers":{"app":"opsguard/app:v1","sidecar":"opsguard/sidecar:v1"},"healthy_images":["opsguard/app:v1","opsguard/app:v2","opsguard/sidecar:v1"],"lab_images":["opsguard/app:v1","opsguard/app:v2","opsguard/app:broken","opsguard/sidecar:v1"]},
+  "inventory-api": {"service":"inventory","containers":{"app":"opsguard/app:v1","sidecar":"opsguard/sidecar:v1"},"healthy_images":["opsguard/app:v1","opsguard/app:v2","opsguard/sidecar:v1"],"lab_images":["opsguard/app:v1","opsguard/app:v2","opsguard/app:broken","opsguard/sidecar:v1"]},
+  "worker-api": {"service":"worker","containers":{"app":"opsguard/app:v1","sidecar":"opsguard/sidecar:v1"},"healthy_images":["opsguard/app:v1","opsguard/app:v2","opsguard/sidecar:v1"],"lab_images":["opsguard/app:v1","opsguard/app:v2","opsguard/app:broken","opsguard/sidecar:v1"]},
+  "billing-api": {"service":"billing","containers":{"app":"opsguard/app:broken","sidecar":"opsguard/sidecar:v1"},"healthy_images":["opsguard/app:v1","opsguard/app:v2","opsguard/sidecar:v1"],"lab_images":["opsguard/app:v1","opsguard/app:v2","opsguard/app:broken","opsguard/sidecar:v1"]}
+}
