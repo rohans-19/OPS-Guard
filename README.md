@@ -48,7 +48,7 @@ The [benchmark guide](documentations/BENCHMARK_RUNNER_AND_SELECTORS.md) continue
 | Typed executor, server-side dry-run, `restart` operation, alert evidence | `src/opsguard/kube`, `src/opsguard/operations/restart.py` | [Shared executor, restart and alerts](documentations/EXECUTOR_AND_RESTART.md) |
 | Dependency graph, risk decision, `set_config` operation, ConfigMap evidence | `src/opsguard/impact`, `src/opsguard/operations/set_config.py` | [ConfigMap impact workstream](#configmap-impact-workstream) below |
 | Common runner, state oracle, `set_selector` operation, result merging and figures | `src/opsguard/bench`, `src/opsguard/operations/set_selector.py` | [Benchmark runner, state oracle and selector repair](documentations/BENCHMARK_RUNNER_AND_SELECTORS.md) |
-| Replay dashboard | `frontend` | [Demo walkthrough](frontend/README.md) |
+| Replay dashboard | `frontend` | [Phase 1 presenter guide](documentations/PHASE_1_DEMO_GUIDE.md) · [Dashboard setup and imports](frontend/README.md) |
 
 ## Benchmark runner and selector repair
 

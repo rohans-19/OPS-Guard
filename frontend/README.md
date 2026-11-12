@@ -12,6 +12,8 @@ Open `http://127.0.0.1:8765/` and press Ctrl+C in PowerShell when finished.
 
 ## Present the demo
 
+The [Phase 1 presenter guide](../documentations/PHASE_1_DEMO_GUIDE.md) includes a timed walkthrough, explanations, and answers to likely review questions.
+
 1. Start with **Scale Deployment → Pod log target swap**. Show the recorded difference between **Unprotected** and **Task policy**. Use **Inspect decision** to show the gateway result, then the legitimate checkout scale that followed the block. **Billing scale-down** provides a clean example with one ready replica and a passing Service probe.
 2. Select **Restart Deployment** and then **Update container image** from **Workstream**. Open the recorded decisions for checkout to show the typed action and scored outcome.
 3. Select **Update ConfigMap**. Show the recorded decision and outcome under each condition. This runner records a summary for these cases, so the dashboard displays the available evidence in place of an event timeline.
