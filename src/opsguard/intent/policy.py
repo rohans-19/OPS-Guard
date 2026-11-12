@@ -4,11 +4,11 @@ from typing import Literal
 
 from pydantic import TypeAdapter
 
-from opsguard.contracts import ActionRequest, ScaleAction, SetImageAction, SupportedAction, WireModel
+from opsguard.contracts import ActionRequest, ScaleAction, SetImageAction, SetSelectorAction, SupportedAction, WireModel
 from opsguard.intent.evidence import EvidenceRegistry
 from opsguard.intent.inventory import InventorySnapshot
-from opsguard.intent.models import ImagePermission, ScalePermission, TaskIntent
-from opsguard.intent.resolver import TargetResolution, resolve_target
+from opsguard.intent.models import ImagePermission, ScalePermission, SelectorPermission, TaskIntent
+from opsguard.intent.resolver import TargetResolution, resolve_service, resolve_target, selector_backends
 
 
 class FieldBinding(WireModel):
@@ -41,7 +41,8 @@ def evaluate_policy(
         return block("UNSUPPORTED_OR_INVALID_ACTION")
     if action.namespace != intent.namespace:
         return block("NAMESPACE_MISMATCH")
-    if action.name in intent.protected_deployments:
+    protected = intent.protected_services if action.resource == "service" else intent.protected_deployments
+    if action.name in protected:
         return block("PROTECTED_TARGET")
     if observation_ids and (evidence is None or not evidence.contains(task_id, observation_ids)):
         return block("UNKNOWN_OBSERVATION")
@@ -59,6 +60,9 @@ def evaluate_policy(
         if action.arguments.image not in permission.images:
             return block("IMAGE_NOT_AUTHORIZED")
 
+    if isinstance(action, SetSelectorAction):
+        return _selector_policy(action, intent, permission, inventory)
+
     resolution = resolve_target(intent, inventory)
     if resolution.status != "PASS":
         return PolicyResult(status=resolution.status, reason=resolution.reason, resolution=resolution)
@@ -71,4 +75,31 @@ def evaluate_policy(
         status="PASS", reason="TASK_AUTHORIZED", resolution=resolution,
         bindings=tuple(FieldBinding(field=field, authority="trusted_task") for field in fields)
         + (FieldBinding(field="name", authority="live_inventory"),),
+    )
+
+
+def _selector_policy(action: SetSelectorAction, intent: TaskIntent, permission, inventory) -> PolicyResult:
+    """Authorize one whole-selector replacement on the task's own Service."""
+    if not isinstance(permission, SelectorPermission):
+        return PolicyResult(status="BLOCK", reason="OPERATION_NOT_AUTHORIZED")
+    if intent.target.resource != "service" or action.name != intent.target.name:
+        return PolicyResult(status="BLOCK", reason="TASK_SCOPE_MISMATCH")
+    if action.arguments.selector != permission.selector:
+        return PolicyResult(status="BLOCK", reason="SELECTOR_NOT_AUTHORIZED")
+    resolution = resolve_service(intent, inventory)
+    if resolution.status != "PASS":
+        return PolicyResult(status=resolution.status, reason=resolution.reason, resolution=resolution)
+    try:
+        backends = selector_backends(inventory, permission.selector)
+    except (KeyError, TypeError, ValueError, AttributeError):
+        return PolicyResult(status="ESCALATE", reason="INVENTORY_UNVERIFIED", resolution=resolution)
+    # The trusted selector must select the trusted backend and nothing else in
+    # live inventory. A missing or extra match is ambiguous, so a human decides.
+    if backends != (permission.backend,):
+        return PolicyResult(status="ESCALATE", reason="SELECTOR_BACKEND_UNVERIFIED", resolution=resolution)
+    fields = ("task_id", "namespace", "verb", "name", "arguments.selector")
+    return PolicyResult(
+        status="PASS", reason="TASK_AUTHORIZED", resolution=resolution,
+        bindings=tuple(FieldBinding(field=field, authority="trusted_task") for field in fields)
+        + (FieldBinding(field="selector_backend", authority="live_inventory"),),
     )

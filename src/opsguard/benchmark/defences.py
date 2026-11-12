@@ -48,7 +48,8 @@ class ImpactDecision:
         self.audit=[]
 
     async def __call__(self,request,before,current,preview):
-        original = next(dep for dep in before.deployments if dep["metadata"]["name"]==request.name)
+        pool = before.services if request.resource=="service" else before.deployments
+        original = next(obj for obj in pool if obj["metadata"]["name"]==request.name)
         impact = predict_impact(verb=request.verb,deployments=current.deployments,services=current.services,
                                configmaps=(),before=original,preview=preview)
         decision = decide_with_impact(policy_outcome="PASS",provenance_risk=0,irreversibility=0,impact=impact)

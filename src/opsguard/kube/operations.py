@@ -13,6 +13,7 @@ from opsguard.intent.resolver import DeploymentIdentity
 from opsguard.operations.restart import prepare_restart
 from opsguard.operations.scale import ScaleTarget, prepare_scale
 from opsguard.operations.set_image import prepare_set_image
+from opsguard.operations.set_selector import SelectorKey, prepare_set_selector
 
 
 @dataclass(frozen=True)
@@ -21,6 +22,8 @@ class LabBounds:
     scales: Mapping[tuple[str, str], tuple[int, int]] = field(default_factory=dict)
     images: Mapping[tuple[str, str, str], frozenset[str]] = field(default_factory=dict)
     restarts: frozenset[tuple[str, str]] = frozenset()
+    # Service -> the whole selector maps (as sorted item tuples) any condition may write.
+    selectors: Mapping[tuple[str, str], frozenset[SelectorKey]] = field(default_factory=dict)
 
     def __post_init__(self):
         from opsguard.contracts import DnsLabel
@@ -28,13 +31,14 @@ class LabBounds:
         object.__setattr__(self, "scales", MappingProxyType(dict(self.scales)))
         object.__setattr__(self, "images", MappingProxyType({key: frozenset(values) for key, values in self.images.items()}))
         object.__setattr__(self, "restarts", frozenset(self.restarts))
-        if any(key[0] != self.namespace for group in (self.scales, self.images, self.restarts) for key in group):
+        object.__setattr__(self, "selectors", MappingProxyType({key: frozenset(values) for key, values in self.selectors.items()}))
+        if any(key[0] != self.namespace for group in (self.scales, self.images, self.restarts, self.selectors) for key in group):
             raise ValueError("lab bounds must use the configured namespace")
 
 
 class PreparedMutation(WireModel):
     preparation_id: str
-    operation: Literal["scale", "set_image", "restart"]
+    operation: Literal["scale", "set_image", "restart", "set_selector"]
     target: DeploymentIdentity
     method: Literal["PUT", "PATCH"]
     path: str
@@ -69,6 +73,11 @@ def _restart(action, deployment, bounds):
                  "PATCH", "application/json-patch+json")
 
 
+def _selector(action, service, bounds):
+    return _wrap("set_selector", prepare_set_selector(action, service=service, lab_selectors=bounds.selectors),
+                 "PATCH", "application/json-patch+json")
+
+
 class OperationRegistry:
     """Register code-owned handlers at application startup, never through a model tool."""
 
@@ -81,6 +90,8 @@ class OperationRegistry:
         self._handlers[verb] = handler
 
     def prepare(self, request, deployment: dict, bounds: LabBounds) -> PreparedMutation:
+        # "deployment" is the independently read live target object. For
+        # set_selector that object is the Service.
         action = TypeAdapter(SupportedAction).validate_python(request.model_dump() if hasattr(request, "model_dump") else request)
         if action.namespace != bounds.namespace or deployment["metadata"].get("deletionTimestamp"):
             raise ValueError("target is outside the live lab")
@@ -92,6 +103,7 @@ class OperationRegistry:
 
 def default_registry() -> OperationRegistry:
     registry = OperationRegistry()
-    for verb, handler in (("scale", _scale), ("set_image", _image), ("restart", _restart)):
+    for verb, handler in (("scale", _scale), ("set_image", _image), ("restart", _restart),
+                          ("set_selector", _selector)):
         registry.register(verb, handler)
     return registry

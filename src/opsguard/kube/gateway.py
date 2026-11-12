@@ -1,4 +1,4 @@
-"""Shared gateway for scale, image and restart, with an optional impact decision port."""
+"""Shared gateway for scale, image, restart and selector, with an optional impact decision port."""
 
 import asyncio
 from time import monotonic
@@ -9,10 +9,11 @@ import httpx
 from pydantic import TypeAdapter
 
 from opsguard.agent.interfaces import GatewayResult
-from opsguard.contracts import AlertsRead, ConfigMapRead, DeploymentRead, PodLogsRead, RunbookRead, SupportedAction, WireModel
+from opsguard.contracts import (AlertsRead, ConfigMapRead, DeploymentRead, PodLogsRead, RunbookRead, ServiceRead,
+                                SupportedAction, WireModel)
 from opsguard.intent.evidence import EvidenceRegistry
 from opsguard.intent.policy import evaluate_policy
-from opsguard.intent.resolver import resolve_target
+from opsguard.intent.resolver import resolve_diagnostic_target
 from opsguard.kube.executor import MutationExecutor
 
 
@@ -47,7 +48,9 @@ class ExecutionGateway:
             return GatewayResult(status="BLOCK", reason="READ_OUT_OF_SCOPE")
         started = monotonic()
         snapshot = await self.inventory_reader.inventory(timeout_seconds=timeout_seconds)
-        resolved = resolve_target(self.intent, snapshot)
+        if isinstance(request, ServiceRead):
+            return self._service_state(request, snapshot)
+        resolved = resolve_diagnostic_target(self.intent, snapshot)
         if resolved.status != "PASS" or request.name != resolved.target.name:
             return GatewayResult(status="BLOCK", reason="READ_TARGET_UNVERIFIED")
         if isinstance(request, DeploymentRead):
@@ -75,6 +78,20 @@ class ExecutionGateway:
             return GatewayResult(status="BLOCK", reason="EVIDENCE_OUT_OF_SCOPE")
         self.evidence.add(record)
         return GatewayResult(status="OK", reason="EVIDENCE_OBSERVED", data={"observation": record.model_dump()})
+
+    def _service_state(self, request, snapshot):
+        """Only the Service named by the trusted task is readable; its text is live inventory."""
+        services = [obj for obj in snapshot.services if obj["metadata"]["name"] == request.name
+                    and obj["metadata"].get("namespace", request.namespace) == request.namespace]
+        if self.intent.target.resource != "service" or request.name != self.intent.target.name or len(services) != 1:
+            return GatewayResult(status="BLOCK", reason="READ_TARGET_UNVERIFIED")
+        ready = sum(1 for item in snapshot.endpointslices
+                    if item["metadata"].get("labels", {}).get("kubernetes.io/service-name") == request.name
+                    for endpoint in item.get("endpoints") or [] if endpoint.get("conditions", {}).get("ready") is True)
+        selector = services[0].get("spec", {}).get("selector") or {}
+        return GatewayResult(status="OK", reason="SERVICE_STATE", data={
+            "name": request.name, "uid": services[0]["metadata"].get("uid"),
+            "selector": {str(key): str(value) for key, value in selector.items()}, "ready_endpoints": ready})
 
     async def propose(self, request, *, task_id, timeout_seconds, observation_ids=()):
         try:
@@ -121,8 +138,9 @@ class ExecutionGateway:
                                      evidence=self.evidence, observation_ids=observation_ids)
             if policy.status != "PASS":
                 return result(policy.status, policy.reason)
-        targets = [dep for dep in before.deployments if dep["metadata"]["name"] == request.name
-                   and dep["metadata"]["namespace"] == request.namespace]
+        pool = before.services if request.resource == "service" else before.deployments
+        targets = [obj for obj in pool if obj["metadata"]["name"] == request.name
+                   and obj["metadata"].get("namespace", request.namespace) == request.namespace]
         if len(targets) != 1:
             return result("BLOCK", "TARGET_NOT_FOUND")
         try:

@@ -8,7 +8,7 @@ from pydantic import Field
 
 from opsguard.contracts import DnsLabel, ObjectName, WireModel
 from opsguard.intent.inventory import InventorySnapshot
-from opsguard.intent.models import TaskIntent
+from opsguard.intent.models import SelectorPermission, TaskIntent
 
 
 class DeploymentIdentity(WireModel):
@@ -153,3 +153,61 @@ def resolve_target(intent: TaskIntent, snapshot: InventorySnapshot) -> TargetRes
         return TargetResolution(status="PASS", reason="TARGET_RESOLVED", target=identity, binding=binding)
     except (KeyError, TypeError, ValueError, AttributeError):
         return stop("ESCALATE", "INVENTORY_UNVERIFIED")
+
+
+def resolve_service(intent: TaskIntent, snapshot: InventorySnapshot) -> TargetResolution:
+    """Bind a Service-level write to the live named Service. Its routing may be broken."""
+    def stop(status, reason):
+        return TargetResolution(status=status, reason=reason)
+
+    if snapshot.namespace != intent.namespace:
+        return stop("ESCALATE", "INVENTORY_NAMESPACE_MISMATCH")
+    if intent.target.resource != "service":
+        return stop("BLOCK", "TARGET_NOT_A_SERVICE")
+    try:
+        service = _index(snapshot.services, intent.namespace).get(intent.target.name)
+        if service is None:
+            return stop("BLOCK", "TARGET_NOT_FOUND")
+        metadata = service["metadata"]
+        if not metadata.get("uid") or metadata.get("deletionTimestamp"):
+            return stop("ESCALATE", "TARGET_UNAVAILABLE")
+        if intent.target.uid and metadata["uid"] != intent.target.uid:
+            return stop("BLOCK", "TARGET_RECREATED")
+        if service.get("spec", {}).get("type") == "ExternalName":
+            return stop("BLOCK", "TARGET_NOT_SELECTABLE")
+        return TargetResolution(status="PASS", reason="TARGET_RESOLVED", binding="named_object",
+                                target=_identity(service, intent.namespace))
+    except (KeyError, TypeError, ValueError, AttributeError):
+        return stop("ESCALATE", "INVENTORY_UNVERIFIED")
+
+
+def selector_backends(snapshot: InventorySnapshot, selector: dict) -> tuple[str, ...]:
+    """Names of live Deployments whose Pod template a selector would match."""
+    names = []
+    for name, dep in _index(snapshot.deployments, snapshot.namespace).items():
+        if dep["metadata"].get("deletionTimestamp"):
+            continue
+        if _matches(selector, dep["spec"]["template"]["metadata"].get("labels", {})):
+            names.append(name)
+    return tuple(sorted(names))
+
+
+def resolve_diagnostic_target(intent: TaskIntent, snapshot: InventorySnapshot) -> TargetResolution:
+    """The workload whose evidence a task may read.
+
+    A selector repair cannot follow the Service's endpoints, because they are
+    what is broken. Its trusted permission names the intended backend instead.
+    """
+    permission = next((rule for rule in intent.permissions if isinstance(rule, SelectorPermission)), None)
+    if permission is None:
+        return resolve_target(intent, snapshot)
+    if snapshot.namespace != intent.namespace:
+        return TargetResolution(status="ESCALATE", reason="INVENTORY_NAMESPACE_MISMATCH")
+    try:
+        dep = _index(snapshot.deployments, intent.namespace).get(permission.backend)
+        if dep is None:
+            return TargetResolution(status="BLOCK", reason="TARGET_NOT_FOUND")
+        return TargetResolution(status="PASS", reason="TARGET_RESOLVED", binding="named_object",
+                                target=_identity(dep, intent.namespace))
+    except (KeyError, TypeError, ValueError, AttributeError):
+        return TargetResolution(status="ESCALATE", reason="INVENTORY_UNVERIFIED")

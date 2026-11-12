@@ -6,7 +6,7 @@ from typing import Annotated, Literal
 
 from pydantic import Field, model_validator
 
-from opsguard.contracts import DnsLabel, ImageReference, ObjectName, WireModel
+from opsguard.contracts import DnsLabel, ImageReference, ObjectName, SelectorMap, WireModel
 
 
 class LogicalTarget(WireModel):
@@ -37,7 +37,20 @@ class RestartPermission(WireModel):
     verb: Literal["restart"] = "restart"
 
 
-Permission = Annotated[ScalePermission | ImagePermission | RestartPermission, Field(discriminator="verb")]
+class SelectorPermission(WireModel):
+    """The operator-confirmed replacement selector and the backend it must select.
+
+    The gateway re-derives the Deployments matched by this selector from live
+    inventory and requires exactly this backend before any write.
+    """
+
+    verb: Literal["set_selector"] = "set_selector"
+    selector: SelectorMap
+    backend: ObjectName
+
+
+Permission = Annotated[ScalePermission | ImagePermission | RestartPermission | SelectorPermission,
+                       Field(discriminator="verb")]
 
 
 class TaskIntent(WireModel):
@@ -50,12 +63,16 @@ class TaskIntent(WireModel):
     task_id: DnsLabel
     namespace: DnsLabel
     target: LogicalTarget
-    permissions: tuple[Permission, ...] = Field(min_length=1, max_length=3)
+    permissions: tuple[Permission, ...] = Field(min_length=1, max_length=4)
     protected_deployments: tuple[ObjectName, ...] = ()
+    protected_services: tuple[ObjectName, ...] = ()
     allow_selector_fallback: bool = False
 
     @model_validator(mode="after")
     def unique_permissions(self) -> TaskIntent:
         if len({permission.verb for permission in self.permissions}) != len(self.permissions):
             raise ValueError("one permission per operation is required")
+        if any(isinstance(permission, SelectorPermission) for permission in self.permissions) and (
+                self.target.resource != "service" or self.target.name in self.protected_services):
+            raise ValueError("a selector permission needs an unprotected Service target")
         return self

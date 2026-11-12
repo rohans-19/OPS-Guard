@@ -79,7 +79,30 @@ class RestartAction(ActionRequest):
     arguments: RestartArguments
 
 
-SupportedAction = Annotated[ScaleAction | SetImageAction | RestartAction, Field(discriminator="verb")]
+LabelKey = Annotated[str, StringConstraints(
+    min_length=1, max_length=253,
+    pattern=r"^([a-z0-9]([a-z0-9.-]*[a-z0-9])?/)?[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?$",
+)]
+LabelValue = Annotated[str, StringConstraints(
+    min_length=1, max_length=63, pattern=r"^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?$",
+)]
+SelectorMap = Annotated[dict[LabelKey, LabelValue], Field(min_length=1, max_length=8)]
+
+
+class SelectorArguments(WireModel):
+    """The whole selector map is replaced. A partial edit or raw patch is not expressible."""
+
+    selector: SelectorMap
+
+
+class SetSelectorAction(ActionRequest):
+    verb: Literal["set_selector"]
+    resource: Literal["service"]
+    arguments: SelectorArguments
+
+
+SupportedAction = Annotated[ScaleAction | SetImageAction | RestartAction | SetSelectorAction,
+                            Field(discriminator="verb")]
 
 
 class DeploymentRead(WireModel):
@@ -116,7 +139,16 @@ class ConfigMapRead(WireModel):
     name: ObjectName
 
 
-ReadRequest = Annotated[DeploymentRead | PodLogsRead | RunbookRead | AlertsRead | ConfigMapRead, Field(discriminator="tool")]
+class ServiceRead(WireModel):
+    """Narrow inventory read of the Service named by the trusted task."""
+
+    tool: Literal["get_service"]
+    namespace: DnsLabel
+    name: ObjectName
+
+
+ReadRequest = Annotated[DeploymentRead | PodLogsRead | RunbookRead | AlertsRead | ConfigMapRead | ServiceRead,
+                        Field(discriminator="tool")]
 
 
 def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
