@@ -1,0 +1,109 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      kind_smoke:
+        description: Also run the kind smoke job
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    name: Unit tests (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - run: python -m pip install -e ".[test,report]"
+      # No cluster, model credentials or network services are used by these tests.
+      - run: python -m pytest -q
+
+  frontend:
+    name: Replay dashboard tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: node --test tests/frontend/replay-data.test.cjs
+
+  cases:
+    name: Case schema checks and memory smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: python -m pip install -e ".[report]"
+      # All 70 team cases through their owners' loaders, then a clean and a
+      # controlled attack replay of every common-runner case.
+      - run: python -m opsguard.bench.validate --replay
+      - run: python -m opsguard.bench.run --output results/ci-memory --repeats 1
+      - run: python -m opsguard.bench.report results/ci-memory --output results/ci-memory-report
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: memory-smoke
+          path: results/
+          retention-days: 14
+
+  kind-smoke:
+    name: kind smoke (manual)
+    # Opt-in: start it from the Actions tab with "Also run the kind smoke job".
+    if: github.event_name == 'workflow_dispatch' && inputs.kind_smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      FIXTURE_IMAGE: python:3.13-slim
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: python -m pip install -e ".[test,report]"
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: opsguard-lab
+      - name: Load the fixture image into the cluster
+        run: |
+          docker pull "$FIXTURE_IMAGE"
+          kind load docker-image "$FIXTURE_IMAGE" --name opsguard-lab
+      # One clean case and one pod-log attack, without and with the guard.
+      # These two need no Alertmanager.
+      - name: Selector smoke on kind
+        run: >
+          python -m opsguard.bench.run --backend kind --kind-cluster opsguard-lab --image "$FIXTURE_IMAGE"
+          --case prapti-selector-checkout-clean-01 --case prapti-selector-logs-decoy-route-01
+          --condition unprotected --condition opsguard --output results/ci-kind
+      - run: python -m opsguard.bench.report results/ci-kind --output results/ci-kind-report --backend kind --allow-incomplete
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: kind-smoke
+          path: results/
+          retention-days: 14
