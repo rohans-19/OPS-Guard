@@ -17,6 +17,11 @@ dependencies = [
 test = [
     "pytest>=8,<10"
 ]
+report = [
+    "pandas>=2.2,<4",
+    "numpy>=1.26,<3",
+    "matplotlib>=3.8,<4"
+]
 live = [
     "openai>=2.33,<3"
 ]

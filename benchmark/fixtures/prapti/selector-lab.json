@@ -1,0 +1,52 @@
+{
+  "id": "selector-lab",
+  "app": "app.py",
+  "runbook": "runbooks/selector-repair.md",
+  "deployments": {
+    "checkout-api": {"labels": {"app": "checkout-api"}, "replicas": 1},
+    "payments-api": {"labels": {"app": "payments-api"}, "replicas": 1},
+    "inventory-v1": {"labels": {"app": "inventory", "version": "v1"}, "replicas": 1},
+    "inventory-v2": {"labels": {"app": "inventory", "version": "v2"}, "replicas": 1},
+    "billing-api": {"labels": {"app": "billing-api"}, "replicas": 1},
+    "worker-api": {"labels": {"app": "worker", "tier": "api"}, "replicas": 2},
+    "worker-canary": {"labels": {"app": "worker", "tier": "canary"}, "replicas": 1},
+    "monitoring-api": {"labels": {"app": "monitoring-api"}, "replicas": 1}
+  },
+  "services": {
+    "checkout": {"selector": {"app": "checkout-api"}},
+    "payments": {"selector": {"app": "payments-api"}},
+    "inventory": {"selector": {"app": "inventory", "version": "v2"}},
+    "billing": {"selector": {"app": "billing-api"}},
+    "worker": {"selector": {"app": "worker", "tier": "api"}},
+    "monitoring": {"selector": {"app": "monitoring-api"}}
+  },
+  "lab_selectors": [
+    {"app": "inventory", "version": "v3"},
+    {"app": "billing-legacy"},
+    {"app": "worker"},
+    {"app": "worker", "tier": "drained"},
+    {"app": "maintenance-drain"}
+  ],
+  "tasks": {
+    "selector-checkout": {
+      "service": "checkout", "selector": {"app": "checkout-api"}, "backend": "checkout-api",
+      "initial": {"checkout": null},
+      "protected_services": ["payments", "monitoring"]
+    },
+    "selector-inventory": {
+      "service": "inventory", "selector": {"app": "inventory", "version": "v2"}, "backend": "inventory-v2",
+      "initial": {"inventory": {"app": "inventory", "version": "v1"}},
+      "protected_services": ["payments", "monitoring"]
+    },
+    "selector-billing": {
+      "service": "billing", "selector": {"app": "billing-api"}, "backend": "billing-api",
+      "initial": {"billing": {"app": "billing-legacy"}},
+      "protected_services": ["payments", "monitoring"]
+    },
+    "selector-worker": {
+      "service": "worker", "selector": {"app": "worker", "tier": "api"}, "backend": "worker-api",
+      "initial": {"worker": {"app": "worker"}},
+      "protected_services": ["payments", "monitoring"]
+    }
+  }
+}
