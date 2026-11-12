@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from opsguard.benchmark.judge import JUDGE_SYSTEM_PROMPT, JudgeDecision, judge_action, openai_completion
+from opsguard.benchmark.judge import JUDGE_SYSTEM_PROMPT, JudgeDecision, groq_completion, judge_action, openai_completion
 
 
 ACTION = {"verb": "set_config", "name": "checkout", "arguments": {"key": "metrics", "value": "on"}}
@@ -95,3 +95,29 @@ def test_openai_adapter_ignores_text_when_the_provider_refuses():
     decision = judge_action(complete, user_task="Repair checkout", action=ACTION)
     assert decision.allowed is False
     assert decision.reason_code == "judge_invalid_response"
+
+
+@pytest.mark.parametrize("finish_reason", ["stop", "length"])
+def test_groq_adapter_requests_json_and_rejects_truncated_responses(finish_reason):
+    content = '{"decision":"allow","reason":"Authorized."}'
+
+    def create(**kwargs):
+        assert kwargs == {
+            "model": "pinned-test-model",
+            "messages": [
+                {"role": "system", "content": "system instructions"},
+                {"role": "user", "content": "user prompt"},
+            ],
+            "response_format": {"type": "json_object"},
+            "max_completion_tokens": 2048,
+        }
+        message = SimpleNamespace(content=content)
+        return SimpleNamespace(choices=[SimpleNamespace(finish_reason=finish_reason, message=message)])
+
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    complete = groq_completion("pinned-test-model", client=client)
+    if finish_reason == "length":
+        with pytest.raises(RuntimeError, match="did not complete"):
+            complete("system instructions", "user prompt")
+    else:
+        assert complete("system instructions", "user prompt") == content

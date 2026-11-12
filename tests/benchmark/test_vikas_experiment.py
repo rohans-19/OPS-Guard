@@ -1,12 +1,42 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from opsguard.benchmark.vikas_cases import load_cases, namespaced_action
 from opsguard.benchmark.vikas_experiment import freeze_pilot_settings, run_trial
 from opsguard.benchmark.vikas_replay import ScriptedReplay, scripted_response
 
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+@pytest.mark.parametrize(("arguments", "decision", "reason", "completed"), [
+    ({"key": "cache_mode", "value": "normal"}, "ALLOW", "risk_low", True),
+    ({"cache_mode": "normal"}, "NO_ACTION", "invalid_proposal", False),
+    (None, "NO_ACTION", "no_proposal", False),
+])
+def test_clean_configmap_proposal_uses_literal_argument_fields(tmp_path, arguments, decision, reason, completed):
+    cases = load_cases(ROOT / "benchmark/cases/vikas/configmap_cases.json")
+    case = next(case for case in cases if case["id"] == "vikas-p2-cache-mode-clean-02")
+    action = namespaced_action(case["legitimate"], ScriptedReplay.namespace)
+    fixture_response = scripted_response(ROOT)
+    settings, _ = freeze_pilot_settings()
+
+    def propose(system, _user):
+        assert '"arguments":{"key":"example-setting","value":"example-value"}' in system
+        assert "Return {} for no action" in system
+        return json.dumps({**action, "arguments": arguments} if arguments is not None else {})
+
+    result = run_trial(
+        root=ROOT, backend_factory=lambda item: ScriptedReplay(item, fixture_response, tmp_path),
+        mode="live", case=case, model_id="fake-provider", condition="opsguard", repeat=1,
+        settings=settings, complete=propose,
+    )
+
+    assert (result["decision"], result["reason_code"], result["legitimate_met"], result["error"]) == (
+        decision, reason, completed, None,
+    )
 
 
 def test_provider_path_keeps_judge_separate_and_reports_provider_errors(tmp_path):

@@ -2,7 +2,7 @@
 
 ## Vikas Phase 1 local checks
 
-From the repository root on Windows, install the project and run the tests with Python 3.9 or newer.
+From the repository root on Windows, install the project and run the tests with Python 3.10 or newer.
 
 ```powershell
 py -3 -m pip install -e ".[test]"
@@ -99,12 +99,14 @@ py -3 -m opsguard.benchmark.vikas_run --mode live --cluster opsguard --impact-on
 
 ### Live model trials
 
-For live model trials, install `.[live]`, set `OPENAI_API_KEY` in your local environment, and replace the three placeholders below with the exact model IDs chosen for the study. Set `--risk-preset` if the live pilot selects a different preset.
+Live model trials use Groq by default. Install `.[groq]`, set `GROQ_API_KEY` in your local environment, and replace the placeholders below with the exact Groq model IDs chosen for the study. Use models that support JSON Object Mode. Set `--risk-preset` if the live pilot selects a different preset.
 
 ```powershell
-py -3 -m pip install -e ".[live]"
+py -3 -m pip install -e ".[groq]"
 py -3 -m opsguard.benchmark.vikas_run --mode live --cluster opsguard --model 'MODEL_ID_1' --model 'MODEL_ID_2' --judge-model 'JUDGE_MODEL_ID' --output ../output/opsguard-vikas-live
 ```
+
+For OpenAI live trials, install `.[live]`, set `OPENAI_API_KEY`, pass `--provider openai`, and choose OpenAI model IDs and a separate output directory.
 
 The standalone live adapter uses disposable namespaces, the bounded typed executor, server dry-run, and fresh ConfigMap and HTTP observations.
 

@@ -9,7 +9,7 @@ from pathlib import Path
 from shutil import which
 from subprocess import SubprocessError, run
 
-from opsguard.benchmark.judge import JUDGE_SYSTEM_PROMPT, openai_completion
+from opsguard.benchmark.judge import JUDGE_SYSTEM_PROMPT, groq_completion, openai_completion
 from opsguard.benchmark.vikas_cases import load_cases
 from opsguard.benchmark.vikas_experiment import (
     ABLATIONS, HARDENING, PRIMARY, PROPOSAL_PROMPT, SCRIPTED_MODELS, THRESHOLDS,
@@ -58,6 +58,7 @@ def _run_manifest(root, args, cases, models, conditions, pilot):
     return {
         "schema_version": 1,
         "mode": args.mode,
+        **({"provider": args.provider} if args.mode == "live" and models else {}),
         "cluster": args.cluster,
         "models": list(models),
         "judge_model": args.judge_model if args.mode == "live" else "scripted-policy-comparison",
@@ -84,6 +85,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True, help="directory for manifest, results and report")
     parser.add_argument("--mode", choices=("scripted", "live"), default="scripted")
+    parser.add_argument("--provider", choices=("groq", "openai"), help="live model provider (default: groq)")
     parser.add_argument("--cluster", help="existing kind cluster name for live mode")
     parser.add_argument("--model", action="append", help="exact provider model ID, repeat for both proposal models")
     parser.add_argument("--judge-model", help="exact model ID for the separate judge")
@@ -109,6 +111,8 @@ def main(argv=None):
     conditions = () if args.impact_only else tuple(dict.fromkeys(args.condition or PRIMARY + ABLATIONS))
     if args.impact_only and args.condition:
         parser.error("--condition applies to model trials")
+    if args.provider and (args.mode != "live" or args.impact_only):
+        parser.error("--provider applies to live model trials")
     models = () if args.impact_only else SCRIPTED_MODELS
     if args.mode == "live":
         if not args.cluster:
@@ -126,8 +130,10 @@ def main(argv=None):
             models = tuple(dict.fromkeys(args.model or ()))
             if not models or ("llm_judge" in conditions and not args.judge_model):
                 parser.error("provide --model and, for the judge condition, --judge-model")
-            if not os.environ.get("OPENAI_API_KEY"):
-                parser.error("set OPENAI_API_KEY locally to run live model trials")
+            args.provider = args.provider or "groq"
+            key_name = "GROQ_API_KEY" if args.provider == "groq" else "OPENAI_API_KEY"
+            if not os.environ.get(key_name, "").strip():
+                parser.error(f"set {key_name} locally to run live model trials")
     elif args.cluster or args.model or args.judge_model:
         parser.error("--cluster, --model and --judge-model apply to live mode")
 
@@ -175,8 +181,9 @@ def main(argv=None):
         def backend_factory(case):
             return KindReplay(root, args.cluster, case)
 
-        completions = {model: openai_completion(model) for model in models}
-        judge = openai_completion(args.judge_model) if "llm_judge" in conditions else None
+        completion_factory = groq_completion if args.provider == "groq" else openai_completion
+        completions = {model: completion_factory(model) for model in models}
+        judge = completion_factory(args.judge_model) if "llm_judge" in conditions else None
     else:
         response = scripted_response(root)
 
