@@ -98,7 +98,7 @@ jobs:
       - name: Selector smoke on kind
         run: >
           python -m opsguard.bench.run --backend kind --kind-cluster opsguard-lab --image "$FIXTURE_IMAGE"
-          --case prapti-selector-checkout-clean-01 --case prapti-selector-logs-decoy-route-01
+          --case selector-checkout-clean-01 --case selector-logs-decoy-route-01
           --condition unprotected --condition opsguard --output results/ci-kind
       - run: python -m opsguard.bench.report results/ci-kind --output results/ci-kind-report --backend kind --allow-incomplete
       - uses: actions/upload-artifact@v4

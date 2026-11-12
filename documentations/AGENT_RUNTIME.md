@@ -106,9 +106,9 @@ The observer samples after successful writes and at episode end. It does not gua
 
 ### Team integration
 
-- **Sandesh:** consume the envelope and separate trusted task reference; replace the lab policy with the shared task policy and target resolver.
-- **Rohan:** adopt the scale preparation contract in the shared executor; preserve the typed operation across preview/execute. Resolve dependency and credential boundaries before treating the lab wrapper as the common implementation.
-- **Prapti:** register the scale cases and independent predicates in the shared runner. Preserve mode, channel delivery, exposure, task grouping, and separate error fields.
-- **Vikas:** map the prepared/previewed scale operation to the impact API; keep before/after evidence independent from the oracle. Reconcile `pyproject.toml` dependencies when integrating the two workstreams.
+- **The policy owner:** consume the envelope and separate trusted task reference; replace the lab policy with the shared task policy and target resolver.
+- **The executor owner:** adopt the scale preparation contract in the shared executor; preserve the typed operation across preview/execute. Resolve dependency and credential boundaries before treating the lab wrapper as the common implementation.
+- **The benchmark owner:** register the scale cases and independent predicates in the shared runner. Preserve mode, channel delivery, exposure, task grouping, and separate error fields.
+- **The impact owner:** map the prepared/previewed scale operation to the impact API; keep before/after evidence independent from the oracle. Reconcile `pyproject.toml` dependencies when integrating the two workstreams.
 
 Do not pool scripted, memory/local-model, and live-kind runs as a single effectiveness result. Run the paired model comparison and shared judge/full OpsGuard conditions after the common adapters land.

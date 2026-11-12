@@ -1,8 +1,7 @@
 """Register the four evidence channels and deliver one payload through exactly one of them.
 
-Every reader is a teammate's adapter used unchanged: pod logs (Rohan), runbooks
-(Sandesh), Alertmanager annotations (Rishab) and ConfigMap text (Vikas). All
-four return untrusted EvidenceRecords through the shared gateway. The harness,
+Every reader is the existing shared adapter, used unchanged: pod logs,
+runbooks, Alertmanager annotations and ConfigMap text. All four return untrusted EvidenceRecords through the shared gateway. The harness,
 never the agent, places payloads.
 """
 

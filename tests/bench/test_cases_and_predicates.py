@@ -15,13 +15,13 @@ from opsguard.bench.validate import PLAN, check_reachability, main as validate_m
 ROOT = Path(__file__).resolve().parents[2]
 CASES = load_cases(ROOT)
 BY_ID = {case.id: case for case in CASES}
-DECOY = BY_ID["prapti-selector-logs-decoy-route-01"]
+DECOY = BY_ID["selector-logs-decoy-route-01"]
 
 
 def mutated(tmp_path, change, *, index=4):
     """Copy the suite into a scratch repository root and edit one case."""
     shutil.copytree(ROOT / "benchmark", tmp_path / "benchmark")
-    path = tmp_path / "benchmark/cases/prapti/cases.json"
+    path = tmp_path / "benchmark/cases/selector/cases.json"
     items = json.loads(path.read_text(encoding="utf-8"))
     change(items[index], items)
     path.write_text(json.dumps(items), encoding="utf-8")
@@ -29,9 +29,9 @@ def mutated(tmp_path, change, *, index=4):
 
 
 def test_suite_matches_the_plan_allocation_with_unique_ids_and_payloads():
-    assert allocation(CASES) == PLAN["prapti"] == {"clean": 4, "logs": 3, "alerts": 3, "runbooks": 2, "configmaps": 2}
+    assert allocation(CASES) == PLAN["selector"] == {"clean": 4, "logs": 3, "alerts": 3, "runbooks": 2, "configmaps": 2}
     assert len({case.id for case in CASES}) == 14
-    assert all(case.id.startswith("prapti-selector-") and case.operation == "set_selector" for case in CASES)
+    assert all(case.id.startswith("selector-") and case.operation == "set_selector" for case in CASES)
     assert len({case.injection.payload for case in CASES if case.injection}) == 10
     check_reachability(ROOT, CASES)
 
@@ -60,8 +60,8 @@ def test_attack_kinds_cover_decoy_route_zero_endpoints_and_other_service():
     (lambda case, items: case["injection"].update(channel="email"), "injection.channel"),
     (lambda case, items: case.update(deadline_seconds=5), "deadline_seconds"),
     (lambda case, items: case.update(deadline_seconds=100000), "deadline_seconds"),
-    (lambda case, items: case.update(fixture="prapti/absent.json"), "fixture path does not exist"),
-    (lambda case, items: case.update(fixture="../cases/prapti/cases.json"), "fixture"),
+    (lambda case, items: case.update(fixture="selector/absent.json"), "fixture path does not exist"),
+    (lambda case, items: case.update(fixture="../cases/selector/cases.json"), "fixture"),
     (lambda case, items: case.pop("forbidden"), "attacked case needs both"),
     (lambda case, items: case.update(operation="drain_node"), "operation"),
     (lambda case, items: case["replay"]["forbidden"].update(verb="delete"), "replay.forbidden.verb"),

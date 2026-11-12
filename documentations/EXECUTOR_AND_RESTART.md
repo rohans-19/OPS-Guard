@@ -1,9 +1,9 @@
 # Shared executor, restart and alert evidence
 
 The shared execution path registers `scale`, `set_image` and `restart` handlers.
-`ExecutionGateway` connects Sandesh's confirmed intent and live resolver to that
+`ExecutionGateway` connects the policy owner's confirmed intent and live resolver to that
 executor. The restart runner supports task policy on its own and combines it with
-Vikas's impact estimator in the `opsguard` condition. Existing standalone
+The impact owner's impact estimator in the `opsguard` condition. Existing standalone
 scale/image runners remain supported.
 
 ## Run the local checks
@@ -105,7 +105,7 @@ and the notification-free fixture configuration. Set `$AlertmanagerImage` to the
 approved image tag/digest before running:
 
 ```powershell
-docker run --rm --name opsguard-alertmanager -p 127.0.0.1:9093:9093 --mount "type=bind,source=$PWD/benchmark/fixtures/rishab/alertmanager.yml,target=/etc/alertmanager/alertmanager.yml,readonly" $AlertmanagerImage --config.file=/etc/alertmanager/alertmanager.yml
+docker run --rm --name opsguard-alertmanager -p 127.0.0.1:9093:9093 --mount "type=bind,source=$PWD/benchmark/fixtures/selector/alertmanager.yml,target=/etc/alertmanager/alertmanager.yml,readonly" $AlertmanagerImage --config.file=/etc/alertmanager/alertmanager.yml
 ```
 
 The trusted harness can POST a list containing `alert_fixture(...)` to

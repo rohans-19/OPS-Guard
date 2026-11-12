@@ -1,6 +1,6 @@
 """Regenerate aggregate tables, figures and a Markdown report from saved result files.
 
-    python -m opsguard.bench.report results/prapti-memory --output results/report-memory
+    python -m opsguard.bench.report results/selector-memory --output results/report-memory
 
 Inputs are result files or run directories from any owner. No cluster or model
 credentials are needed. The expected matrix defaults to the models and repeats

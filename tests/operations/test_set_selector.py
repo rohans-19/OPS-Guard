@@ -13,7 +13,7 @@ from opsguard.kube.gateway import ExecutionGateway
 from opsguard.operations.set_selector import prepare_set_selector, selector_key
 
 ROOT = Path(__file__).resolve().parents[2]
-FIXTURE = load_fixture(ROOT, "prapti/selector-lab.json")
+FIXTURE = load_fixture(ROOT, "selector/selector-lab.json")
 
 
 def action(name="checkout", selector=None, namespace="selector-lab"):

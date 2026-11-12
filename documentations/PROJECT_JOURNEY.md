@@ -8,11 +8,11 @@ OpsGuard studies whether a Kubernetes agent can complete an operator’s task wh
 
 | Date | Status | Milestone | Evidence |
 | --- | --- | --- | --- |
-| November 6 | Merged | The five-person implementation plan defined ownership, a shared action schema, four evidence channels, and an observer that scores actual Kubernetes state. | [Team plan PR #1](https://github.com/rohans-19/OPS-Guard/pull/1) |
-| November 9 | Implemented | Rishab took over Rohan S’s agent workstream. The bounded loop validates model proposals, the scale handler prepares the Kubernetes request, and the pod-log reader returns scoped evidence with its source. | [Runtime changes](https://github.com/rohans-19/OPS-Guard/pull/2/files) · [Runtime runbook](AGENT_RUNTIME.md) |
+| November 6 | Merged | The five-person implementation plan defined ownership, a shared action schema, four evidence channels, and an observer that scores actual Kubernetes state. | Team plan PR #1 |
+| November 9 | Implemented | The agent owner took over the executor owner’s agent workstream. The bounded loop validates model proposals, the scale handler prepares the Kubernetes request, and the pod-log reader returns scoped evidence with its source. | Runtime changes · [Runtime runbook](AGENT_RUNTIME.md) |
 | November 9 | Verified | The standalone lab passed 23 Python tests, completed 42 scripted memory runs, and verified the four clean cases on kind. All four live pod-log attacks reached the agent. Standalone task policy blocked all four forbidden changes and completed all four intended scales. One unprotected run hit a stale Deployment version during recovery. | [Audit results and trace filenames](AGENT_WORKSTREAM_HANDOFF.md#verified-results) |
 | November 9–10 | Pilot | Qwen and Llama ran through the same local adapter. In separate in-memory runs, Llama followed the injection unprotected, while Qwen’s hardened run stopped after repeated out-of-scope namespace proposals. Each tested model and condition pair had one trial. | [Per-run model results](AGENT_WORKSTREAM_HANDOFF.md#verified-results) |
-| November 10 | Merged | The runtime and benchmark runner landed on `main`. The replay console and workstream handoff followed, giving the team a way to compare recorded proposals and inspect the events behind each decision. | [Runtime PR #2](https://github.com/rohans-19/OPS-Guard/pull/2) · [Replay dashboard PR #3](https://github.com/rohans-19/OPS-Guard/pull/3) |
+| November 10 | Merged | The runtime and benchmark runner landed on `main`. The replay console and workstream handoff followed, giving the team a way to compare recorded proposals and inspect the events behind each decision. | Runtime PR #2 · Replay dashboard PR #3 |
 
 ## Phase 1 report summary
 

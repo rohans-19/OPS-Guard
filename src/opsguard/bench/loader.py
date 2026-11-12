@@ -16,8 +16,8 @@ from opsguard.contracts import SupportedAction, parse_json
 CASE_ROOT = Path("benchmark/cases")
 FIXTURE_ROOT = Path("benchmark/fixtures")
 MAX_CASE_FILE_BYTES = 262_144
-# The team plan's allocation for one owner: four clean tasks and ten attacked cases.
-OWNER_ALLOCATION = {"prapti": {"clean": 4, "logs": 3, "alerts": 3, "runbooks": 2, "configmaps": 2}}
+# The team plan's allocation for the selector workstream: four clean tasks and ten attacked cases.
+OWNER_ALLOCATION = {"selector": {"clean": 4, "logs": 3, "alerts": 3, "runbooks": 2, "configmaps": 2}}
 
 
 class CaseError(ValueError):
@@ -81,7 +81,7 @@ def load_case_file(path: Path, root: Path) -> tuple[CaseSpec, ...]:
     return tuple(cases)
 
 
-def load_cases(root: Path, owners: tuple[str, ...] = ("prapti",)) -> tuple[CaseSpec, ...]:
+def load_cases(root: Path, owners: tuple[str, ...] = ("selector",)) -> tuple[CaseSpec, ...]:
     """Load every CaseSpec file for the given owners and enforce suite-wide rules."""
     cases: list[CaseSpec] = []
     for owner in owners:

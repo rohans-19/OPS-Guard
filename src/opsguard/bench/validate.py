@@ -23,13 +23,13 @@ from opsguard.bench.schema import CHANNELS
 from opsguard.bench.selector_lab import load_fixture
 from opsguard.operations.set_selector import selector_key
 
-# Team plan, benchmark allocation table. Owners follow the plan's workstream names.
+# Team plan, benchmark allocation table, keyed by workstream (the operation each suite exercises).
 PLAN = {
-    "rohan": {"clean": 4, "logs": 4, "alerts": 2, "runbooks": 2, "configmaps": 2},
-    "sandesh": {"clean": 4, "logs": 2, "alerts": 2, "runbooks": 4, "configmaps": 2},
-    "rishab": {"clean": 4, "logs": 2, "alerts": 4, "runbooks": 2, "configmaps": 2},
-    "vikas": {"clean": 4, "logs": 2, "alerts": 2, "runbooks": 2, "configmaps": 4},
-    "prapti": {"clean": 4, "logs": 3, "alerts": 3, "runbooks": 2, "configmaps": 2},
+    "scale": {"clean": 4, "logs": 4, "alerts": 2, "runbooks": 2, "configmaps": 2},
+    "image": {"clean": 4, "logs": 2, "alerts": 2, "runbooks": 4, "configmaps": 2},
+    "restart": {"clean": 4, "logs": 2, "alerts": 4, "runbooks": 2, "configmaps": 2},
+    "config": {"clean": 4, "logs": 2, "alerts": 2, "runbooks": 2, "configmaps": 4},
+    "selector": {"clean": 4, "logs": 3, "alerts": 3, "runbooks": 2, "configmaps": 2},
 }
 
 
@@ -39,22 +39,22 @@ def _counts(channels) -> dict[str, int]:
 
 
 def team_allocation(root: Path) -> dict[str, dict[str, int]]:
-    """Load every owner's suite through that owner's own validating loader."""
+    """Load every workstream's suite through its own validating loader."""
     from opsguard.benchmark.image_cases import load_image_suite
     from opsguard.benchmark.restart_cases import load_restart_suite
     from opsguard.benchmark.scale_cases import load_scale_suite
-    from opsguard.benchmark.vikas_cases import load_cases as load_vikas_cases
+    from opsguard.benchmark.vikas_cases import load_cases as load_config_cases
 
     def injected(cases):
         return [case.injection.channel if case.injection else None for case in cases]
 
-    vikas = load_vikas_cases(root / "benchmark/cases/vikas/configmap_cases.json")
+    config_cases = load_config_cases(root / "benchmark/cases/vikas/configmap_cases.json")
     return {
-        "rohan": _counts(injected(load_scale_suite(root)[2])),
-        "sandesh": _counts(injected(load_image_suite(root)[2])),
-        "rishab": _counts(injected(load_restart_suite(root)[2])),
-        "vikas": _counts(case.get("injection", {}).get("channel") for case in vikas),
-        "prapti": allocation(load_cases(root)),
+        "scale": _counts(injected(load_scale_suite(root)[2])),
+        "image": _counts(injected(load_image_suite(root)[2])),
+        "restart": _counts(injected(load_restart_suite(root)[2])),
+        "config": _counts(case.get("injection", {}).get("channel") for case in config_cases),
+        "selector": allocation(load_cases(root)),
     }
 
 

@@ -1,4 +1,4 @@
-"""Merge result files from all five owners, check coverage, and compare conditions on paired trials.
+"""Merge result files from all five workstreams, check coverage, and compare conditions on paired trials.
 
 Rows are accepted only for a known case, with a model, condition and repeat in
 the expected matrix. Harness errors stay in their own column and are excluded
@@ -41,7 +41,7 @@ def team_case_index(root: Path) -> dict[str, CaseInfo]:
     from opsguard.benchmark.image_cases import load_image_suite
     from opsguard.benchmark.restart_cases import load_restart_suite
     from opsguard.benchmark.scale_cases import load_scale_suite
-    from opsguard.benchmark.vikas_cases import load_cases as load_vikas_cases
+    from opsguard.benchmark.vikas_cases import load_cases as load_config_cases
 
     index: dict[str, CaseInfo] = {}
 
@@ -50,13 +50,13 @@ def team_case_index(root: Path) -> dict[str, CaseInfo]:
             raise ValueError(f"case ID is used by two owners: {info.case_id}")
         index[info.case_id] = info
 
-    for owner, cases in (("rohan", load_scale_suite(root)[2]), ("sandesh", load_image_suite(root)[2]),
-                         ("rishab", load_restart_suite(root)[2])):
+    for owner, cases in (("scale", load_scale_suite(root)[2]), ("image", load_image_suite(root)[2]),
+                         ("restart", load_restart_suite(root)[2])):
         for case in cases:
             add(CaseInfo(owner, case.id, f"{owner}:{case.base_task_id}", case.injection.channel if case.injection else None))
-    for case in load_vikas_cases(root / "benchmark/cases/vikas/configmap_cases.json"):
-        # Vikas's file does not name a base task, so each case is its own cluster.
-        add(CaseInfo("vikas", case["id"], f'vikas:{case["id"]}', case.get("injection", {}).get("channel")))
+    for case in load_config_cases(root / "benchmark/cases/vikas/configmap_cases.json"):
+        # The ConfigMap case file does not name a base task, so each case is its own cluster.
+        add(CaseInfo("config", case["id"], f'config:{case["id"]}', case.get("injection", {}).get("channel")))
     for case in load_cases(root):
         add(CaseInfo(case.owner, case.id, f"{case.owner}:{case.task}", case.channel))
     return index
@@ -125,7 +125,7 @@ def merge(raw_rows, index: dict[str, CaseInfo], *, models, conditions, repeats, 
 
     for raw, source in raw_rows:
         if raw.get("kind") not in (None, "trial"):
-            continue  # Vikas's impact replays share the file but are not matrix trials.
+            continue  # Impact replays share the ConfigMap result file but are not matrix trials.
         info = index.get(raw.get("case_id"))
         if info is None:
             reject({"case_id": raw.get("case_id"), "source": source}, "unknown case ID")

@@ -12,7 +12,7 @@ from opsguard.bench.aggregate import (CaseInfo, analyse, breakdown, cluster_inte
 ROOT = Path(__file__).resolve().parents[2]
 CONDITIONS = ("unprotected", "opsguard")
 # Two tasks. Each has one clean case and two attacked cases.
-INDEX = {f"{task}-{kind}": CaseInfo("prapti", f"{task}-{kind}", f"prapti:{task}", channel)
+INDEX = {f"{task}-{kind}": CaseInfo("selector", f"{task}-{kind}", f"selector:{task}", channel)
          for task in ("t1", "t2") for kind, channel in (("clean", None), ("a", "logs"), ("b", "alerts"))}
 
 
@@ -132,23 +132,23 @@ def test_interval_resamples_tasks_not_trials():
 
 def test_rows_from_every_owner_normalize_to_the_shared_fields():
     index = team_case_index(ROOT)
-    assert len(index) == 70 and {info.owner for info in index.values()} == {"rohan", "sandesh", "rishab", "vikas", "prapti"}
+    assert len(index) == 70 and {info.owner for info in index.values()} == {"scale", "image", "restart", "config", "selector"}
     restart = normalize({"case_id": "restart-logs-target-swap", "base_task_id": "restart-checkout", "condition": "llm-judge",
                          "repeat": 2, "backend": "kind", "provider": "groq", "model_id": "openai/gpt-oss-20b",
                          "legitimate_met": True, "forbidden_seen": False, "error": None, "task_ms": 812.5,
                          "run_id": "r1", "trial_id": "r1", "attempt": 1, "config_sha256": "c" * 64},
                         index["restart-logs-target-swap"], "restart.jsonl:1")
-    assert (restart["owner"], restart["task"], restart["channel"], restart["attacked"]) == ("rishab", "rishab:restart-checkout", "logs", True)
+    assert (restart["owner"], restart["task"], restart["channel"], restart["attacked"]) == ("restart", "restart:restart-checkout", "logs", True)
     assert restart["experiment"] == "c" * 64 and valid(restart)
-    vikas = normalize({"kind": "trial", "mode": "scripted", "case_id": "vikas-p2-logs-decoy-01",
+    config = normalize({"kind": "trial", "mode": "scripted", "case_id": "vikas-p2-logs-decoy-01",
                        "model_id": "scripted-task-first", "condition": "llm_judge", "repeat": 1, "channel": "logs",
                        "legitimate_met": True, "forbidden_met": True, "error": None, "elapsed_ms": 3.0},
                       index["vikas-p2-logs-decoy-01"], "results.jsonl:9")
-    assert (vikas["condition"], vikas["forbidden_seen"], vikas["backend"], vikas["provider"]) == ("llm-judge", True, "memory", "scripted")
+    assert (config["condition"], config["forbidden_seen"], config["backend"], config["provider"]) == ("llm-judge", True, "memory", "scripted")
     clean = normalize({"case_id": "scale-checkout", "condition": "policy_only", "repeat": 1, "backend": "memory",
                        "model_id": "scripted", "legitimate_met": True, "forbidden_seen": None, "error": None},
                       index["scale-checkout"], "scale.jsonl:1")
-    assert (clean["owner"], clean["condition"], clean["attacked"], clean["forbidden_seen"]) == ("rohan", "task-policy", False, None)
+    assert (clean["owner"], clean["condition"], clean["attacked"], clean["forbidden_seen"]) == ("scale", "task-policy", False, None)
     assert valid(clean)
 
 
@@ -156,7 +156,7 @@ def test_mixed_configurations_from_one_owner_are_flagged():
     rows = full_matrix()
     for number, item in enumerate(rows):
         item["experiment_sha256"] = ("a" if number % 2 else "b") * 64
-    assert merged(rows).mixed_configurations == {"prapti/memory/scripted": ["a" * 64, "b" * 64]}
+    assert merged(rows).mixed_configurations == {"selector/memory/scripted": ["a" * 64, "b" * 64]}
     assert not merged(rows).complete
 
 

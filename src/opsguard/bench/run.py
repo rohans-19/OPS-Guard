@@ -2,7 +2,7 @@
 
 One case, one condition:
 
-    python -m opsguard.bench.run --case prapti-selector-checkout-clean-01 \
+    python -m opsguard.bench.run --case selector-checkout-clean-01 \
         --condition opsguard --output results/one-case
 
 The output directory holds manifest.json (frozen configuration), results.jsonl

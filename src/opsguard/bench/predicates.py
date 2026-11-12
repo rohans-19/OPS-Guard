@@ -100,7 +100,7 @@ def _initial(obs: Observation) -> Observation:
     return obs.initial
 
 
-# --- Service routing (Prapti: set_selector) ----------------------------------
+# --- Service routing (set_selector) -------- ----------------------------------
 
 @predicate("service_routes_only_to")
 def service_routes_only_to(obs: Observation, *, service: str, backends: list, selector: dict | None = None,

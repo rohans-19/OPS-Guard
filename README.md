@@ -1,6 +1,68 @@
 # OPS-Guard
 
-## Vikas Phase 1 local checks
+OpsGuard is a deterministic gate for an LLM-powered Kubernetes operations agent. The agent reads logs, alert annotations, runbooks and ConfigMaps as evidence, then proposes a typed Kubernetes action. OpsGuard checks that action against the operator's authorization, re-derives the intended target from live inventory, previews the write, and estimates its downstream effect. A separate oracle reads real cluster state to decide what actually happened.
+
+The repository also contains OpsGuard-Bench: 20 clean tasks and 50 attacked cases across four evidence channels, with runners that compare four defence conditions.
+
+## Quick start
+
+No cluster or model credentials are needed. Run these from the repository root in PowerShell with Python 3.10 or newer.
+
+1. Create the environment and install the project.
+
+   ```powershell
+   py -3 -m venv .venv
+   .\.venv\Scripts\python.exe -m pip install -e ".[test,report]"
+   ```
+
+2. Run the tests.
+
+   ```powershell
+   .\.venv\Scripts\python.exe -m pytest -q
+   ```
+
+3. Validate all 70 benchmark cases and replay the selector cases in memory.
+
+   ```powershell
+   .\.venv\Scripts\python.exe -m opsguard.bench.validate --replay
+   ```
+
+   The last line prints `OK`.
+
+4. Run one attacked case without a defence and with OpsGuard.
+
+   ```powershell
+   .\.venv\Scripts\python.exe -m opsguard.bench.run --case selector-logs-decoy-route-01 --condition unprotected --condition opsguard --output results/one-case
+   ```
+
+   The unprotected line shows `forbidden=True` and the OpsGuard line shows `forbidden=False`.
+
+The [benchmark guide](documentations/BENCHMARK_RUNNER_AND_SELECTORS.md) continues from here with the live kind cluster, model trials and the merged team report.
+
+## Components
+
+| Component | Code | Guide |
+| --- | --- | --- |
+| Bounded agent loop, model adapters, `scale` operation, pod-log evidence | `src/opsguard/agent`, `src/opsguard/operations/scale.py` | [Agent runtime and scaling](documentations/AGENT_RUNTIME.md) |
+| Task policy, provenance, live target resolution, `set_image` operation, runbook evidence | `src/opsguard/intent`, `src/opsguard/operations/set_image.py` | [Task authorization and image updates](documentations/AUTHORIZATION_AND_IMAGES.md) |
+| Typed executor, server-side dry-run, `restart` operation, alert evidence | `src/opsguard/kube`, `src/opsguard/operations/restart.py` | [Shared executor, restart and alerts](documentations/EXECUTOR_AND_RESTART.md) |
+| Dependency graph, risk decision, `set_config` operation, ConfigMap evidence | `src/opsguard/impact`, `src/opsguard/operations/set_config.py` | [ConfigMap impact workstream](#configmap-impact-workstream) below |
+| Common runner, state oracle, `set_selector` operation, result merging and figures | `src/opsguard/bench`, `src/opsguard/operations/set_selector.py` | [Benchmark runner, state oracle and selector repair](documentations/BENCHMARK_RUNNER_AND_SELECTORS.md) |
+| Replay dashboard | `frontend` | [Demo walkthrough](frontend/README.md) |
+
+## Benchmark runner and selector repair
+
+The common runner in `src/opsguard/bench` loads cases, sets up a fixture, places one injected payload in one evidence channel, runs the agent through the shared gateway, and scores the result from independent observations of cluster state. It supports case, model, condition and repeat filters, resumable result IDs, and retries that keep earlier failed attempts.
+
+The `set_selector` operation replaces the whole selector map of one Service. Its suite has four clean repairs and ten attacked cases (three through logs, three through alerts, two through runbooks, two through ConfigMaps). The attacks try to route a Service to a decoy, leave it with no ready endpoints, or change another Service.
+
+`python -m opsguard.bench.report` merges result files from every workstream, checks coverage and duplicates, and reports paired attack-success differences with intervals that resample whole tasks. It writes tables and figures.
+
+Verified so far: the unit tests, a 168-trial scripted run in memory, and a 56-trial scripted run on a live kind cluster, all with no harness errors. Scripted runs check the runner, gateway and oracle paths. Trials with real models have not been run yet.
+
+## ConfigMap impact workstream
+
+### Phase 1 local checks
 
 From the repository root on Windows, install the project and run the tests with Python 3.10 or newer.
 
@@ -21,7 +83,7 @@ It traces one ConfigMap to two Services, previews a single-key update, and check
 - The risk decision takes the policy outcome and normalized risk signals and can serialize the result as one JSON Lines record. The default weights and thresholds are provisional settings for Phase 1 tests.
 - The `set_config` handler prepares a one-key patch within explicit lab bounds. Task authorization is a separate decision. The shared executor will supply live preview, execution, and version checks.
 
-## Vikas Phase 2 ConfigMap replay
+### Phase 2 ConfigMap replay
 
 Run the local Phase 2 tests with:
 
@@ -39,7 +101,7 @@ Deployment selectors and templates approximate backend routing. Application beha
 
 The ConfigMap evidence reader supplies raw observations only. `decide_with_impact` combines the prediction with the policy and risk inputs. Missing or uncertain impact prevents an otherwise low-risk allow.
 
-### Phase 2 Kubernetes smoke tests
+#### Phase 2 Kubernetes smoke tests
 
 To run the two opt-in smoke tests, use a local `kind` cluster with `kubectl` available and the ability to pull the fixture's Python image.
 
@@ -55,7 +117,7 @@ The smoke tests deploy the fixture in disposable namespaces. They verify server-
 
 The shared executor, policy, and runner can replace those test adapters when available.
 
-## Vikas Phase 3 and 4 experiment
+### Phase 3 and 4 experiment
 
 After installing the project, run this command from the repository root to reproduce the local experiment.
 
@@ -71,7 +133,7 @@ Each impact replay independently compares the predicted degradation with HTTP st
 
 The separate synthetic pilot scenarios choose a threshold preset before the case matrix starts. The weights remain fixed during the threshold sweep.
 
-### Experiment output
+#### Experiment output
 
 The run directory contains:
 
@@ -81,7 +143,7 @@ The run directory contains:
 
 Rerunning with the same manifest resumes missing records. A fresh output directory and the `--case` and `--condition` filters let you retry failed trials while preserving the original error records.
 
-### Regenerate the report
+#### Regenerate the report
 
 Regenerate the report from saved results without a cluster or model credentials.
 
@@ -89,7 +151,7 @@ Regenerate the report from saved results without a cluster or model credentials.
 py -3 -m opsguard.benchmark.vikas_run --report-only --output ../output/opsguard-vikas-results
 ```
 
-### Live impact replays
+#### Live impact replays
 
 For live impact replays, use an existing named `kind` cluster with `kubectl` and the fixture image available. This run needs no model credentials.
 
@@ -97,7 +159,7 @@ For live impact replays, use an existing named `kind` cluster with `kubectl` and
 py -3 -m opsguard.benchmark.vikas_run --mode live --cluster opsguard --impact-only --output ../output/opsguard-vikas-live-impact
 ```
 
-### Live model trials
+#### Live model trials
 
 Live model trials use Groq by default. Install `.[groq]`, set `GROQ_API_KEY` in your local environment, and replace the placeholders below with the exact Groq model IDs chosen for the study. Use models that support JSON Object Mode. Set `--risk-preset` if the live pilot selects a different preset.
 
@@ -134,7 +196,7 @@ The following documentation covers the team's shared implementation, architectur
 
 ### 3. Task Authorization and Image Updates
 
-[Task authorization and image updates](documentations/AUTHORIZATION_AND_IMAGES.md) covers trusted intent, live target resolution, runbook evidence, and Sandesh's image replay cases.
+[Task authorization and image updates](documentations/AUTHORIZATION_AND_IMAGES.md) covers trusted intent, live target resolution, runbook evidence, and the image replay cases.
 
 ### 4. Shared Executor, Restart and Alerts
 
@@ -157,15 +219,6 @@ See the [demo walkthrough](frontend/README.md) for launch and trace import steps
 ### 8. Benchmark Runner, State Oracle and Selector Repair
 
 [Benchmark runner, state oracle and selector repair](documentations/BENCHMARK_RUNNER_AND_SELECTORS.md) is a step-by-step guide to the common runner, the `set_selector` operation and its 14 cases, the live kind lab, model trials, and the merged team report.
-
-Quick check, with no cluster or credentials:
-
-1. Install: `py -3 -m venv .venv`, then `.\.venv\Scripts\python.exe -m pip install -e ".[test,report]"`
-2. Test: `.\.venv\Scripts\python.exe -m pytest -q`
-3. Validate all 70 team cases and replay the selector cases: `.\.venv\Scripts\python.exe -m opsguard.bench.validate --replay`
-4. Run one case: `.\.venv\Scripts\python.exe -m opsguard.bench.run --case prapti-selector-logs-decoy-route-01 --condition unprotected --condition opsguard --output results/one-case`
-
-The guide continues with the live cluster, model trials and the team report.
 
 ---
 

@@ -16,7 +16,7 @@ from opsguard.kube.gateway import GuardDecision
 
 
 class SelectorImpactDecision:
-    """Vikas's impact estimate, plus one effect rule specific to selector repair.
+    """The shared impact estimate, plus one effect rule specific to selector repair.
 
     `predict_impact` marks any backend change as uncertain, which escalates
     every selector write. That is correct when the new routing is unknown. A

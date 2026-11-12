@@ -1,4 +1,4 @@
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 1
 CONSOLIDATED STUDY
 Admission Control for AI Operations
@@ -7,7 +7,7 @@ Evidence
 What industry sells and needs, what has gone wrong, what to build, how to build
 and prove it, and how it supports a patent filing and SDG 9
 Prepared for
-Rishab - Final-year B.E. CSE (AI/ML), RV College of Engineering, Bengaluru
+The project team - Final-year B.E. CSE (AI/ML), RV College of Engineering, Bengaluru
 What this is
 The industry study and the complete pipeline study merged into one structure, with
 overlaps removed and cross-references renumbered. The scale arithmetic and the
@@ -22,7 +22,7 @@ Date
 26 October 2026
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 2
 Read This First
 The limits come first, because they decide what you can honestly claim and build.
@@ -99,7 +99,7 @@ budget. 6) Evaluation harness with the state-diff oracle. Each step is testable 
 a defensible result if you stop after step 4.
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 3
 How This Report Is Organised
 Part
@@ -158,7 +158,7 @@ Case 2 - Amazon Q Developer extension, July 2025
 Case 3 - AWS Kiro and Cost Explorer, December 2025 (contested)
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 4
  .  .  .  .  .  .  .  .  .  .  .  .  .  . 14
 Case 4 - 'Escape from Pod 9', Straiker / STAR Labs, 2026 (research demonstration)
@@ -214,7 +214,7 @@ Case 6 - Oldsmar water plant, February 2021 (OT)
 10.2 Data governance
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 5
 28
 11. Preprocessing and Engineering Techniques
@@ -268,7 +268,7 @@ Page 5
 17.1 Student credit programmes (indicative; verify on the provider's page)
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 6
  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  .  . 41
 17.2 Compatibility with cloud agent platforms
@@ -288,7 +288,7 @@ Appendix A - What Is Verified and What Is Not
 Appendix B - Sources
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 7
 PART I - LANDSCAPE AND NEED
 1. Scope and Terms
@@ -301,7 +301,7 @@ Two settings are covered: cloud and Kubernetes operations, where most products a
 industrial operations (OT), where consequences are physical and standards are slower to move.
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 8
 2. Existing Solutions in Industry
 2.1 AI operations agents and how they gate actions
@@ -433,7 +433,7 @@ not read their
 action-control designs
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 9
 2.2 The AI-agent security and control layer
 Category and
@@ -594,7 +594,7 @@ not infrastructure; a measure, not a
 gate
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 10
 Work
 Key concept
@@ -611,7 +611,7 @@ models; network operations, not
 Kubernetes or OT
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 11
 2.4 Industrial (OT) vendors
 Vendor
@@ -708,7 +708,7 @@ The first Indian regulator warning
 aimed squarely at agent authority
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 12
 3. What Industry Says It Needs
 Evidence is rated: A primary document or official source; B reputable reporting; C vendor-commissioned
@@ -762,11 +762,11 @@ defensible: limits on how much one agent can change, proof that it can be undone
 give in seconds, and a record. That plumbing is the gap a contribution should target.
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 13
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 14
 4. Case Studies
 Each case gives what happened, the control that was missing, the industry response, and the need it reveals.
@@ -824,7 +824,7 @@ The danger lived in the effect of the manifest (a privileged container with host
 diff would show. Data-derived arguments need independent checking.
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 15
 Case 5 - CERT-In advisory CIAD-2026-0049, 15 October 2026 (India, Critical)
 What happened
@@ -856,7 +856,7 @@ In industrial settings the gate must be an engineering envelope on the process v
 actor, human or agent.
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 16
 4.7 Pattern across the cases (my assessment)
 Case
@@ -906,7 +906,7 @@ Case 5 needs a different control. This is the evidence behind the concept in Sec
 motivates the concept rather than proves it.
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 17
 5. Needs Versus Coverage
 'Not found' means not found in the documents I read, not proven absent. This matrix is my assessment.
@@ -998,7 +998,7 @@ Not found
 Not applicable
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 18
 PART II - THE CONCEPT
 6. Where and What Exactly We Would Build
@@ -1063,18 +1063,18 @@ Case 6; CERT-In and Indian SCADA incidents show
 relevance
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 19
 How this relates to your fault-detection goal: diagnosis finds the fault; remediation acts on it; this layer
 decides whether that action is safe to take automatically. It is the part industry says blocks autonomy, so it is
 the remediation half of fault handling, not a separate subject.
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 20
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 21
 7. The Patent-Grade Candidate
 7.1 The technical problem
@@ -1157,7 +1157,7 @@ four signals
 'Not found' means not found in what I read. A formal prior-art search may change this table in either direction.
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 22
 7.4 Claim sketch (an illustration, not legal advice)
 Independent claim, in outline
@@ -1223,7 +1223,7 @@ while you build is plausible and inexpensive; a granted patent is not predictabl
 a report or viva.
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 23
 7.7 A second candidate for industrial settings
 An envelope-bound action admission for operator agents in a process plant: each proposed setpoint or
@@ -1234,7 +1234,7 @@ exact match in a limited search, but adjacent work (ADMITBench, PLCBench) is rec
 fast. It needs a process simulator and process knowledge you may not have yet.
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 24
 PART III - BUILDING IT
 8. Build Scope: What Exactly Are We Building
@@ -1279,7 +1279,7 @@ infrastructure. It is not fault detection, so if fault detection remains your co
 this replaces or supplements it.
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 25
 9. Compatibility: Tools, Systems and the Topic
 9.1 Where the gate can sit
@@ -1394,7 +1394,7 @@ tool node
 B/C
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 26
 Layer
 Tool
@@ -1489,7 +1489,7 @@ holder of infrastructure credentials.
 UNKNOWN_DEPENDENCY and are routed to a human.
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 27
 10. Is Real Data Required?
 No private production data is required. The controller makes deterministic decisions from a live system's
@@ -1593,7 +1593,7 @@ addresses or identifiers.
 describes agents under evaluation reaching live systems; your harness must not be able to do that.
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 28
 11. Preprocessing and Engineering Techniques
 Because the controller is deterministic, most of the 'data engineering' is turning messy requests and cluster
@@ -1724,7 +1724,7 @@ attacker built from the defence
 description
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 29
 Technique
 Input to output
@@ -1749,11 +1749,11 @@ Splitting. Split tasks by incident class, and hold out whole injection families 
 the final test, so the controller is not tuned on what it is later scored against.
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 30
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 31
 12. Methodology and Technology Stack
 12.1 Methodology
@@ -1838,7 +1838,7 @@ A larger hosted set if budget
 allows
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 32
 13. Exact System Design
 Untrusted context
@@ -1922,7 +1922,7 @@ UIDs
 One canonical form of a call
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 33
 Object
 Key fields
@@ -1994,7 +1994,7 @@ def decide(e: Evidence) -> Tier:
 Listing 2. Incident budget and certificate freshness (illustrative)
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 34
 def budget_after(ledger: dict, new: dict) -> float:
     # ledger and new map resource UID -> weight. Overlapping effects
@@ -2063,7 +2063,7 @@ approvals or exhaust approvers.
 recommendation on shutdown controls.
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 35
 13.6 Drawings for the specification
 Figure
@@ -2087,7 +2087,7 @@ claims and abstract. A provisional specification can omit claims; confirm the de
 background knowledge).
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 36
 PART IV - PROVING AND PROTECTING IT
 14. Validation and Evidence Plan
@@ -2146,7 +2146,7 @@ These numbers are my assumptions, not facts about your project; the 20-episode p
 measured value. The proposal behind this work says only 'multiple seeds' and 'several injection variants'.
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 37
 Item
 As written (assumed)
@@ -2193,7 +2193,7 @@ parallel clusters (my estimate - time one reset and one episode first). Namespac
 machine make parallel runs possible.
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 38
 15. Workflow and Gates
 Gate
@@ -2270,7 +2270,7 @@ whether you want the patent, an open tool, or both, and release the evaluation h
 openly while holding the controller until filing.
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 39
 16. Reliability, Reproducibility, Versioning and Trust
 16.1 Reliability of the controller
@@ -2330,7 +2330,7 @@ Run-manifest hash; paper and patent evidence frozen at a git tag
 16.4 Trustworthiness
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 40
 Dimension
 Control or measure
@@ -2362,7 +2362,7 @@ NIST AI risk management framework
 (background knowledge)
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 41
 17. Cloud Services and Infrastructure
 Need
@@ -2448,7 +2448,7 @@ configuration; ledger in a managed database; approvals through the team's chat t
 admission policy as the backstop; emergency stop as a single credential revocation.
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 42
 PART V - WHY IT MATTERS
 18. Industry Scope
@@ -2504,7 +2504,7 @@ agent-platform vendors that lack effect-based gating.
 open evaluation, a working reference controller and a defensible claim.
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 43
 19. SDG 9 Contributions, Stated Honestly
 Target wording is paraphrased from the UN text. The proposal's mapping overstated two targets and used one
@@ -2570,7 +2570,7 @@ researchers per million people (9.5.2). State the contribution at project level 
 AI automation of critical-infrastructure operations', as the proposal itself does.
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 44
 20. Fit With Your Goals
 What you have said you want
@@ -2659,7 +2659,7 @@ Staged release; hold back directly transferable
 payloads
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 45
 Risk
 Why it matters
@@ -2684,7 +2684,7 @@ about filing order, the fee category and the licence before posting or releasing
 patent agent run a prior-art search before filing.
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 46
 Appendix A - What Is Verified and What Is Not
 Status
@@ -2742,7 +2742,7 @@ security bulletin AWS-2025-015 on Amazon Q (Jul 2025); Financial Times reporting
 TeckNexus on Honeywell (Aug 2026); MarketsandMarkets Industrial Agentic AI report (Sep 2026).
 ADMISSION CONTROLLER PIPELINE STUDY
 Scope, data, stack, design, evidence
-Prepared for Rishab - RVCE, Bengaluru - Working document
+Working document
 Page 47
 • Gartner press release of 25 Jun 2025 and May 2026 commentary (via secondary reporting); Caylent 2026 survey (via
 ai2.work summary); Cisco-commissioned survey and NIST initiative status (via Forkast); Gluware on network teams;

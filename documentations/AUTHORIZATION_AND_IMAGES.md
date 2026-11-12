@@ -158,8 +158,8 @@ of this implementation.
 
 The [shared executor](EXECUTOR_AND_RESTART.md) now registers the scale, image and
 restart handlers. The restart runner connects the impact estimator to that gateway.
-The image runner above still uses its standalone gateway. Sandesh's later evaluation work includes fixed independently
-labeled proposal sets, policy/provenance ablations with Vikas, both models across
+The image runner above still uses its standalone gateway. The policy owner's later evaluation work includes fixed independently
+labeled proposal sets, policy/provenance ablations with the impact owner, both models across
 all four conditions, and separate false-block, escalation and F1 reporting.
 
 Kubernetes references: [EndpointSlice ownership](https://kubernetes.io/docs/concepts/services-networking/endpoint-slices/#ownership),

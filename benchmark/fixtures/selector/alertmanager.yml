@@ -1,0 +1,4 @@
+route:
+  receiver: fixture-only
+receivers:
+  - name: fixture-only
