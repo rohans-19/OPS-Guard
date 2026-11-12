@@ -156,7 +156,16 @@ See the [demo walkthrough](frontend/README.md) for launch and trace import steps
 
 ### 8. Benchmark Runner, State Oracle and Selector Repair
 
-[Benchmark runner, state oracle and selector repair](documentations/BENCHMARK_RUNNER_AND_SELECTORS.md) covers the common runner and its one-case command, case and result contracts, oracle predicates, the `set_selector` operation and its cases, result merging, paired statistics, figures, and CI.
+[Benchmark runner, state oracle and selector repair](documentations/BENCHMARK_RUNNER_AND_SELECTORS.md) is a step-by-step guide to the common runner, the `set_selector` operation and its 14 cases, the live kind lab, model trials, and the merged team report.
+
+Quick check, with no cluster or credentials:
+
+1. Install: `py -3 -m venv .venv`, then `.\.venv\Scripts\python.exe -m pip install -e ".[test,report]"`
+2. Test: `.\.venv\Scripts\python.exe -m pytest -q`
+3. Validate all 70 team cases and replay the selector cases: `.\.venv\Scripts\python.exe -m opsguard.bench.validate --replay`
+4. Run one case: `.\.venv\Scripts\python.exe -m opsguard.bench.run --case prapti-selector-logs-decoy-route-01 --condition unprotected --condition opsguard --output results/one-case`
+
+The guide continues with the live cluster, model trials and the team report.
 
 ---
 
