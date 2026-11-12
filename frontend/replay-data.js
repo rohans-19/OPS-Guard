@@ -3,7 +3,11 @@
 
   const maxBytes = 8 * 1024 * 1024;
   const maxRuns = 5000;
-  const conditions = { unprotected: 'Unprotected', hardened: 'Hardened prompt', 'task-policy': 'Task policy' };
+  const conditions = { unprotected: 'Unprotected', hardened: 'Hardened prompt', 'llm-judge': 'LLM judge',
+    'task-policy': 'Task policy', opsguard: 'OpsGuard', 'no-graph': 'No dependency graph',
+    'no-dry-run': 'No dry-run', controlled: 'Controlled impact replay' };
+  const operations = { scale: 'Scale Deployment', restart: 'Restart Deployment', set_image: 'Update container image',
+    set_config: 'Update ConfigMap', set_selector: 'Repair Service selector' };
   const outcomeFields = ['legitimate_met', 'forbidden_seen', 'safe_completion', 'evidence_exposed'];
 
   function isObject(value) {
@@ -30,6 +34,14 @@
       hasOptionalTextFields(observation.source, ['namespace', 'pod', 'container', 'deployment']));
   }
 
+  function operationFor(row) {
+    if (typeof row.operation === 'string' && Object.hasOwn(operations, row.operation)) return row.operation;
+    const prefix = row.case_id.split('-')[0];
+    const byPrefix = { scale: 'scale', restart: 'restart', image: 'set_image', vikas: 'set_config',
+      configmap: 'set_config', selector: 'set_selector' };
+    return Object.hasOwn(byPrefix, prefix) ? byPrefix[prefix] : 'other';
+  }
+
   function parseJsonl(text) {
     const rows = [];
     const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/);
@@ -42,9 +54,21 @@
       } catch {
         throw new Error(`${lineLabel} contains invalid JSON.`);
       }
-      if (!isObject(row) || !['case_id', 'condition', 'backend', 'model_id'].every(key => hasText(row[key]))) {
-        throw new Error(`${lineLabel} is missing a case ID, condition, backend, or model ID.`);
+      if (!isObject(row) || !['case_id', 'condition', 'model_id'].every(key => hasText(row[key]))) {
+        throw new Error(`${lineLabel} is missing a case ID, condition, or model ID.`);
       }
+      if (row.mode === 'live' || row.mode === 'scripted') {
+        row.backend ??= row.mode === 'live' ? 'kind' : 'memory';
+        row.delivery ??= row.evidence_delivery;
+        row.forbidden_seen ??= row.forbidden_met;
+      }
+      row.condition = row.condition.replaceAll('_', '-');
+      if (row.condition === 'policy-only') row.condition = 'task-policy';
+      if (row.channel === 'clean') row.channel = null;
+      row.operation = operationFor(row);
+      if (!hasText(row.backend)) throw new Error(`${lineLabel} is missing a backend.`);
+      if (row.trace === undefined && (hasText(row.trace_ref) || hasText(row.decision) ||
+          ['trial', 'impact_replay'].includes(row.kind))) row.trace = [];
       if (!Array.isArray(row.trace) || row.trace.length > 2000 || !row.trace.every(isTraceEvent)) {
         throw new Error(`${lineLabel} is missing a valid trace array.`);
       }
@@ -64,6 +88,14 @@
     return rows;
   }
 
+  function attachTrace(row, payload) {
+    if (!isObject(payload) || payload.case_id !== row.case_id || payload.condition !== row.condition ||
+        !Array.isArray(payload.agent) || payload.agent.length > 2000 || !payload.agent.every(isTraceEvent)) {
+      throw new Error(`Invalid trace for ${row.case_id} (${row.condition}).`);
+    }
+    return { ...row, trace: payload.agent, before: payload.before, after: payload.after };
+  }
+
   function groupRuns(rows) {
     const buckets = new Map();
     const groups = [];
@@ -71,8 +103,9 @@
       const fixture = isObject(row.fixture_sha256)
         ? Object.keys(row.fixture_sha256).sort().map(key => [key, row.fixture_sha256[key]])
         : null;
-      const key = JSON.stringify([row.case_id, row.backend, row.model_id, row.repeat ?? 1,
-        row.seed ?? null, row.fixture_image ?? null, fixture]);
+      const key = JSON.stringify([row.case_id, row.backend, row.provider, row.model_id, row.repeat ?? 1,
+        row.seed ?? null, row.fixture_image ?? null, fixture, row.experiment_sha256 ?? row.config_sha256,
+        row.attempt ?? 1]);
       if (!buckets.has(key)) buckets.set(key, { groups: [], occurrences: new Map() });
       const bucket = buckets.get(key);
       const occurrence = bucket.occurrences.get(row.condition) ?? 0;
@@ -116,24 +149,31 @@
     return frames;
   }
 
-  function scaleProposals(trace) {
-    const fixtureNamespace = trace.find(event => event.event === 'gateway' &&
+  function canonical(value) {
+    if (Array.isArray(value)) return value.map(canonical);
+    if (!isObject(value)) return value;
+    return Object.fromEntries(Object.keys(value).sort().map(key => [key, canonical(value[key])]));
+  }
+
+  function actionProposals(trace, namespace) {
+    const fixtureNamespace = namespace ?? trace.find(event => event.event === 'gateway' &&
       hasText(event.synthetic_result?.data?.observation?.source?.namespace))
       ?.synthetic_result.data.observation.source.namespace;
     return traceFrames(trace).flatMap((frame, frameIndex) => {
       const event = frame.events.find(item => item.event === 'request' && item.kind === 'action');
       const request = event?.request;
-      const replicas = request?.arguments?.replicas;
-      if (request?.verb !== 'scale' || request.resource !== 'deployment' ||
-          !hasText(request.namespace) || !hasText(request.name) || !Number.isInteger(replicas)) return [];
-      const namespace = request.namespace === fixtureNamespace ? null : request.namespace;
+      if (!hasText(request?.verb) || !Object.hasOwn(operations, request.verb) || !hasText(request.resource) ||
+          !hasText(request.namespace) || !hasText(request.name) || !isObject(request.arguments)) return [];
+      if (request.verb === 'scale' && !Number.isInteger(request.arguments.replicas)) return [];
+      const targetNamespace = request.namespace === fixtureNamespace ? null : request.namespace;
       const response = frame.events.find(item => item.event === 'gateway');
-      return [{ key: JSON.stringify([namespace, request.name, replicas]), namespace, name: request.name, replicas,
+      return [{ key: JSON.stringify([request.verb, request.resource, targetNamespace, request.name, canonical(request.arguments)]),
+        namespace: targetNamespace, name: request.name, verb: request.verb, arguments: request.arguments,
         frameIndex, status: response?.status, reason: response?.reason }];
     });
   }
 
-  function matchScaleProposals(proposalsByRun) {
+  function matchActionProposals(proposalsByRun) {
     if (proposalsByRun.length < 2) return [];
     const firstByRun = proposalsByRun.map(proposals => {
       const first = new Map();
@@ -143,8 +183,7 @@
     const matches = [];
     for (const [key, proposal] of firstByRun[0]) {
       const proposals = firstByRun.map(first => first.get(key));
-      if (proposals.every(Boolean)) matches.push({ namespace: proposal.namespace, name: proposal.name,
-        replicas: proposal.replicas, proposals });
+      if (proposals.every(Boolean)) matches.push({ ...proposal, proposals });
     }
     return matches;
   }
@@ -157,7 +196,8 @@
     return Object.hasOwn(conditions, value) ? conditions[value] : label(value);
   }
 
-  const api = { maxBytes, parseJsonl, groupRuns, tally, traceFrames, scaleProposals, matchScaleProposals, conditionLabel, label };
+  const api = { maxBytes, parseJsonl, attachTrace, groupRuns, tally, traceFrames, actionProposals, matchActionProposals,
+    operations, operationFor, conditionLabel, label };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else globalThis.OpsGuardReplay = api;
 })();

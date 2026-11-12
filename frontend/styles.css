@@ -98,6 +98,8 @@ h1 { margin: 9px 0 5px; font-size: clamp(31px, 4vw, 44px); font-weight: 760; lin
 .page-heading > div > p:last-child, .section-heading > div > p:last-child { color: var(--muted); line-height: 1.55; }
 .select-field { display: grid; gap: 6px; width: min(100%, 292px); flex: 0 0 auto; }
 .select-field span { color: #4d5f79; font-size: 11px; font-weight: 700; }
+.replay-selectors { display: flex; flex-wrap: wrap; gap: 10px 16px; margin-bottom: 16px; }
+.library-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 select { min-width: 0; min-height: 38px; padding: 7px 10px; border: 1px solid #d5dfed; border-radius: 8px; background: white; color: var(--ink); font-size: 13px; }
 .notice { margin: 0 0 14px; padding: 10px 13px; border: 1px solid #c7d9f7; border-radius: 8px; background: #edf3ff; color: #274775; overflow-wrap: anywhere; }
 .notice.is-error { border-color: #efc4ca; background: var(--red-bg); color: var(--red); }

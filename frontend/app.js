@@ -1,15 +1,18 @@
 (() => {
   'use strict';
 
-  const { maxBytes, parseJsonl, groupRuns, tally, traceFrames, scaleProposals, matchScaleProposals,
-    conditionLabel, label } = OpsGuardReplay;
+  const { maxBytes, parseJsonl, attachTrace, groupRuns, tally, traceFrames, actionProposals, matchActionProposals,
+    operations, operationFor, conditionLabel, label } = OpsGuardReplay;
   const byId = id => document.getElementById(id);
   const scenario = byId('scenario');
+  const operation = byId('operation');
   const proposalSelect = byId('comparison-proposal');
   const stepList = byId('step-list');
   const traceFile = byId('trace-file');
+  const runFolder = byId('run-folder');
   const runSearch = byId('run-search');
-  const demoName = 'Bundled kind demo';
+  const demoName = 'Bundled workstream demos';
+  const demoRows = parseJsonl(OPSGUARD_DEMO.map(row => JSON.stringify(row)).join('\n'));
   const pageSize = 10;
   const conditionDescriptions = new Map([
     ['unprotected', 'Common lab bounds'],
@@ -25,6 +28,10 @@
     ['scale-checkout', ['Checkout scale-up', 'Scale the checkout deployment to three ready replicas.']],
     ['scale-inventory', ['Inventory scale-up', 'Scale the inventory deployment from one replica to two.']],
     ['scale-worker', ['Worker scale-up', 'Scale the worker deployment while keeping its canary at one replica.']],
+    ['restart-checkout', ['Checkout restart', 'Verify a fresh checkout rollout and a healthy Service.']],
+    ['image-checkout', ['Checkout image update', 'Check a scoped container image change in the memory fixture.']],
+    ['vikas-p2-feature-flag-clean-01', ['ConfigMap feature flag', 'Review the policy decision and the observed configuration outcome.']],
+    ['selector-checkout-clean-01', ['Checkout Service repair', 'Verify that checkout selects its intended backend.']],
   ]);
 
   let rows = [];
@@ -84,11 +91,16 @@
 
   function proposalLabel(proposal) {
     const target = proposal.namespace ? `${proposal.namespace}/${proposal.name}` : proposal.name;
-    return `${target} → ${replicaLabel(proposal.replicas)}`;
+    const args = proposal.arguments;
+    if (proposal.verb === 'scale') return `${target} → ${replicaLabel(args.replicas)}`;
+    if (proposal.verb === 'restart') return `Restart ${target}`;
+    if (proposal.verb === 'set_image') return `${target} · ${args.container ?? 'container'} → ${args.image ?? 'image'}`;
+    if (proposal.verb === 'set_config') return `${target} · ${args.key ?? 'key'} → ${args.value ?? 'value'}`;
+    return `${target} → ${JSON.stringify(args.selector ?? args)}`;
   }
 
   function backendLabel(value) {
-    if (value === 'kind') return 'Live kind';
+    if (value === 'kind') return 'Recorded on kind';
     if (value === 'memory') return 'In memory';
     return label(value);
   }
@@ -102,6 +114,7 @@
     const parts = [caseTitle(row), backendLabel(row.backend), row.model_id];
     if (!demoLoaded) parts.push(`Run ${row.repeat ?? 1}`);
     if (Number.isSafeInteger(row.seed)) parts.push(`Seed ${row.seed}`);
+    if (row.attempt > 1) parts.push(`Attempt ${row.attempt}`);
     if (group.occurrence > 1) parts.push(`Set ${group.occurrence}`);
     return parts.join(' · ');
   }
@@ -119,14 +132,15 @@
     demoLoaded = bundled;
     groups = groupRuns(rows);
     groupByRun = new Map(groups.flatMap(group => group.runs.map(row => [row, group])));
-    scenario.replaceChildren(...groups.map(group => {
-      const option = element('option', null, scenarioOption(group));
-      option.value = group.index;
+    const available = new Set(rows.map(operationFor));
+    operation.replaceChildren(...[...Object.keys(operations), 'other'].filter(key => available.has(key)).map(key => {
+      const option = element('option', null, operations[key] ?? 'Other');
+      option.value = key;
       return option;
     }));
     byId('restore-demo').hidden = bundled;
     byId('dataset-description').textContent = bundled
-      ? `${demoName} · selected fields from three recorded Kubernetes runs.`
+      ? `${demoName} · ${rows.length} recorded runs across ${available.size} workstreams.`
       : `${datasetName} · imported into this browser session.`;
     runSearch.value = '';
     page = 0;
@@ -136,8 +150,14 @@
 
   function chooseGroup(group, run) {
     selectedGroup = group;
-    scenario.value = group.index;
     const row = group.runs[0];
+    operation.value = operationFor(row);
+    scenario.replaceChildren(...groups.filter(item => operationFor(item.runs[0]) === operation.value).map(item => {
+      const option = element('option', null, scenarioOption(item));
+      option.value = item.index;
+      return option;
+    }));
+    scenario.value = group.index;
     let scenarioType = 'Clean task';
     if (row.channel === 'logs') scenarioType = 'Pod log injection';
     else if (typeof row.channel === 'string') scenarioType = `${label(row.channel)} evidence`;
@@ -151,12 +171,13 @@
     byId('condition-count').textContent = `${group.runs.length} ${group.runs.length === 1 ? 'condition' : 'conditions'}`;
     renderMetrics(group.runs);
     prepareComparison(group.runs);
-    chooseRun(run ?? group.runs.find(candidate => candidate.condition === 'task-policy') ?? row);
+    chooseRun(run ?? group.runs.find(candidate => candidate.condition === 'opsguard') ??
+      group.runs.find(candidate => candidate.condition === 'task-policy') ?? row);
   }
 
   function prepareComparison(runs) {
-    proposalsByRun = runs.map(row => scaleProposals(row.trace));
-    matchedProposals = matchScaleProposals(proposalsByRun);
+    proposalsByRun = runs.map(row => actionProposals(row.trace, row.namespace));
+    matchedProposals = matchActionProposals(proposalsByRun);
     proposalSelect.replaceChildren(...matchedProposals.map((proposal, index) => {
       const option = element('option', null, proposalLabel(proposal));
       option.value = index;
@@ -168,7 +189,7 @@
     byId('proposal-controls').hidden = matchedProposals.length === 0;
     const note = byId('proposal-note');
     note.hidden = matchedProposals.length > 0 || runs.length < 2;
-    note.textContent = 'These runs have different proposals. Each card shows its first recorded scale proposal, when available.';
+    note.textContent = 'Each card shows its own recorded action or decision summary.';
     renderComparison();
   }
 
@@ -207,7 +228,7 @@
 
   function decisionTone(status) {
     if (status === 'ALLOW') return 'good';
-    if (status === 'BLOCK' || status === 'ESCALATE') return 'warn';
+    if (['BLOCK', 'DENY', 'ESCALATE'].includes(status)) return 'warn';
     if (status === 'ERROR') return 'bad';
     return 'neutral';
   }
@@ -237,18 +258,22 @@
     const footer = element('div', 'run-card-footer');
     const elapsed = element('span', 'duration');
     elapsed.append(icon('clock'), element('span', null, duration(row.elapsed_ms)));
-    const inspect = button('text-button', proposal ? 'Inspect decision' : 'View trace',
+    const inspectLabel = proposal ? 'Inspect decision' : row.trace.length ? 'View trace' : 'View summary';
+    const inspect = button('text-button', inspectLabel,
       () => revealTrace(row, proposal?.frameIndex), 'arrow');
     inspect.setAttribute('aria-label', `${inspect.textContent} for ${conditionLabel(row.condition)}`);
     footer.append(elapsed, inspect);
     card.append(header);
-    if (proposal) {
-      const decision = proposal.status ?? 'Unrecorded';
+    const recordedDecision = Array.isArray(row.decisions) ? row.decisions.find(item => typeof item?.status === 'string') : null;
+    const decision = proposal?.status ?? (typeof row.decision === 'string' ? row.decision : recordedDecision?.status);
+    if (proposal || decision) {
       const summary = element('div', `proposal-summary tone-${decisionTone(decision)}`);
       const target = element('div');
-      target.append(element('small', null, 'Gateway response'), element('strong', null, proposalLabel(proposal)));
-      if (proposal.reason) target.append(element('span', 'proposal-reason', label(proposal.reason.toLowerCase())));
-      summary.append(target, badge(decisionTone(decision), decision));
+      const reason = proposal?.reason ?? row.reason_code ?? recordedDecision?.reason;
+      target.append(element('small', null, proposal ? 'Gateway response' : 'Recorded decision'));
+      if (proposal) target.append(element('strong', null, proposalLabel(proposal)));
+      if (typeof reason === 'string') target.append(element('span', 'proposal-reason', label(reason.toLowerCase())));
+      summary.append(target, badge(decisionTone(decision), decision ?? 'Unrecorded'));
       card.append(summary);
     }
     card.append(outcomes, footer);
@@ -360,8 +385,15 @@
   function renderStep(frame) {
     const detail = byId('step-detail');
     if (!frame) {
-      detail.replaceChildren(element('h3', null, 'No event details'),
-        element('p', null, activeRun?.error ?? 'The run contains no recorded trace events.'));
+      detail.replaceChildren(element('h3', null, 'Recorded run summary'),
+        element('p', null, activeRun?.error ?? (activeRun?.trace_ref
+          ? 'Import the run folder to load the recorded event trace.'
+          : 'This runner recorded an outcome summary.')));
+      const { decision, reason_code, decisions, risk_score, predicted_services, observed_services } = activeRun;
+      const summary = { decision, reason_code, decisions, risk_score, predicted_services, observed_services };
+      if (Object.values(summary).some(value => value != null)) {
+        detail.append(element('pre', null, JSON.stringify(summary, null, 2)));
+      }
       return;
     }
     const info = frameInfo(frame);
@@ -378,6 +410,12 @@
     const raw = element('details');
     raw.append(element('summary', null, 'Recorded event data'), element('pre', null, JSON.stringify(frame.events, null, 2)));
     nodes.push(raw);
+    if (activeRun.before || activeRun.after) {
+      const observed = element('details');
+      observed.append(element('summary', null, 'Observed state before and after'),
+        element('pre', null, JSON.stringify({ before: activeRun.before, after: activeRun.after }, null, 2)));
+      nodes.push(observed);
+    }
     detail.replaceChildren(...nodes);
   }
 
@@ -403,7 +441,7 @@
 
   function renderLibrary() {
     const query = runSearch.value.trim().toLowerCase();
-    const matches = rows.filter(row => [row.case_id, caseTitle(row), row.condition,
+    const matches = rows.filter(row => [row.case_id, caseTitle(row), operations[operationFor(row)] ?? '', row.condition,
       conditionLabel(row.condition), row.model_id, row.backend].some(value => value.toLowerCase().includes(query)));
     const start = page * pageSize;
     const visible = matches.slice(start, start + pageSize);
@@ -447,25 +485,66 @@
   }
 
   byId('import-button').addEventListener('click', () => traceFile.click());
-  traceFile.addEventListener('change', async () => {
-    const file = traceFile.files[0];
-    traceFile.value = '';
-    if (!file) return;
+  byId('import-folder').addEventListener('click', () => runFolder.click());
+
+  async function importResults(input, folder = false) {
+    const files = Array.from(input.files);
+    input.value = '';
+    if (!files.length) return;
     const revision = ++importRevision;
     try {
-      if (file.size > maxBytes) throw new Error('Choose a JSONL file of 8 MB or less.');
-      const imported = parseJsonl(await file.text());
+      const results = folder ? files.filter(file => file.name === 'results.jsonl') : files;
+      if (!results.length) throw new Error('Choose a benchmark folder containing results.jsonl.');
+      if (results.reduce((bytes, file) => bytes + file.size, 0) > maxBytes) {
+        throw new Error('Choose result files totaling 8 MB or less.');
+      }
+      const filesByPath = new Map(files.map(file => [file.webkitRelativePath, file]));
+      const imported = [];
+      let traceBytes = 0;
+      let attached = 0;
+      for (const file of results) {
+        const records = parseJsonl(await file.text());
+        const prefix = file.webkitRelativePath.slice(0, -file.name.length);
+        for (const row of records) {
+          if (revision !== importRevision) return;
+          let record = row;
+          if (folder && !row.trace.length && typeof row.trace_ref === 'string' &&
+              /^traces\/[a-zA-Z0-9_-]+\.json$/.test(row.trace_ref)) {
+            const trace = filesByPath.get(prefix + row.trace_ref);
+            if (trace && trace.size <= maxBytes && traceBytes + trace.size <= 4 * maxBytes) {
+              traceBytes += trace.size;
+              record = attachTrace(row, JSON.parse(await trace.text()));
+              attached++;
+            }
+          }
+          imported.push(record);
+          if (imported.length > 5000) throw new Error('Choose at most 5,000 runs per import.');
+        }
+      }
       if (revision !== importRevision) return;
-      setDataset(imported, file.name);
-      notice(`Loaded ${imported.length} ${imported.length === 1 ? 'run' : 'runs'} from ${file.name}.`);
+      const name = folder ? files[0].webkitRelativePath.split('/')[0]
+        : results.length === 1 ? results[0].name : `${results.length} JSONL files`;
+      setDataset(imported, name);
+      const missing = imported.filter(row => row.trace_ref && !row.trace.length).length;
+      let message = `Loaded ${imported.length} ${imported.length === 1 ? 'run' : 'runs'} from ${name}.`;
+      if (attached) message += ` Attached ${attached} trace files.`;
+      if (missing) message += ` ${missing} runs have summaries only.`;
+      notice(message);
+      if (folder) {
+        window.location.hash = 'replay';
+        byId('replay').scrollIntoView({ block: 'start' });
+      }
     } catch (error) {
       if (revision === importRevision) notice(error.message, true);
     }
-  });
+  }
+
+  traceFile.addEventListener('change', () => importResults(traceFile));
+  runFolder.addEventListener('change', () => importResults(runFolder, true));
   byId('restore-demo').addEventListener('click', () => {
     importRevision++;
-    setDataset(OPSGUARD_DEMO, demoName, true);
-    notice('Restored the bundled kind demo.');
+    setDataset(demoRows, demoName, true);
+    notice('Restored the bundled workstream demos.');
     byId('import-button').focus({ preventScroll: true });
   });
   byId('export-data').addEventListener('click', () => {
@@ -478,6 +557,7 @@
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   });
   scenario.addEventListener('change', () => chooseGroup(groups[Number(scenario.value)]));
+  operation.addEventListener('change', () => chooseGroup(groups.find(group => operationFor(group.runs[0]) === operation.value)));
   proposalSelect.addEventListener('change', renderComparison);
   byId('start-guided').addEventListener('click', () => {
     stopReplay();
@@ -494,5 +574,5 @@
   byId('next-page').addEventListener('click', () => { page++; renderLibrary(); });
   window.addEventListener('hashchange', syncNavigation);
   syncNavigation();
-  setDataset(OPSGUARD_DEMO, demoName, true);
+  setDataset(demoRows, demoName, true);
 })();

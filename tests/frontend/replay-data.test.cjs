@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { groupRuns, parseJsonl, tally, traceFrames, scaleProposals, matchScaleProposals } = require('../../frontend/replay-data.js');
+const { groupRuns, parseJsonl, attachTrace, tally, traceFrames, actionProposals, matchActionProposals } = require('../../frontend/replay-data.js');
 require('../../frontend/demo-data.js');
 
 const row = {
@@ -10,14 +10,18 @@ const row = {
   model_id: 'scripted', trace: [], legitimate_met: true, forbidden_seen: false,
 };
 
-test('bundled captures reproduce the target-swap comparison and the clean case', () => {
+test('bundled captures cover five operations and retain the kind scale outcomes', () => {
   const jsonl = globalThis.OPSGUARD_DEMO.map(record => JSON.stringify(record)).join('\n');
-  const groups = groupRuns(parseJsonl(jsonl));
-  assert.equal(groups.length, 2);
-  assert.deepEqual(groups[0].runs.map(run => run.condition), ['unprotected', 'task-policy']);
-  assert.deepEqual(tally(groups[0].runs, 'legitimate_met'), { yes: 2, total: 2 });
-  assert.deepEqual(tally(groups[0].runs, 'forbidden_seen'), { yes: 1, total: 2 });
-  assert.equal(groups[1].runs[0].case_id, 'scale-billing');
+  const records = parseJsonl(jsonl);
+  assert.deepEqual([...new Set(records.map(run => run.operation))].sort(),
+    ['restart', 'scale', 'set_config', 'set_image', 'set_selector']);
+  const groups = groupRuns(records);
+  assert.equal(groups.length, 6);
+  const [targetSwap, billing] = groups.filter(group => group.runs[0].operation === 'scale');
+  assert.deepEqual(targetSwap.runs.map(run => run.condition), ['unprotected', 'task-policy']);
+  assert.deepEqual(tally(targetSwap.runs, 'legitimate_met'), { yes: 2, total: 2 });
+  assert.deepEqual(tally(targetSwap.runs, 'forbidden_seen'), { yes: 1, total: 2 });
+  assert.equal(billing.runs[0].case_id, 'scale-billing');
 });
 
 test('invalid imports report the line and do not accept string outcomes', () => {
@@ -59,14 +63,48 @@ test('a replay retains step zero, combines proposal and response, and includes t
 
 test('decision comparison matches the same requested scale across fixture namespaces', () => {
   const [group] = groupRuns(globalThis.OPSGUARD_DEMO);
-  const [baseline, policy] = group.runs.map(run => scaleProposals(run.trace));
-  const matches = matchScaleProposals([baseline, policy]);
-  assert.deepEqual(matches.map(match => [match.name, match.replicas]), [['payments-api', 3], ['checkout-api', 3]]);
+  const [baseline, policy] = group.runs.map(run => actionProposals(run.trace));
+  const matches = matchActionProposals([baseline, policy]);
+  assert.deepEqual(matches.map(match => [match.name, match.arguments.replicas]), [['payments-api', 3], ['checkout-api', 3]]);
   assert.deepEqual(matches[0].proposals.map(proposal => proposal.status), ['ALLOW', 'BLOCK']);
   assert.deepEqual(matches[1].proposals.map(proposal => proposal.frameIndex), [2, 2]);
-  assert.deepEqual(matchScaleProposals([[baseline[0]], [policy[1]]]), []);
-  assert.equal(matchScaleProposals([baseline, [policy[0], { ...policy[0], status: 'ALLOW' }]])[0].proposals[1].status, 'BLOCK');
+  assert.deepEqual(matchActionProposals([[baseline[0]], [policy[1]]]), []);
+  assert.equal(matchActionProposals([baseline, [policy[0], { ...policy[0], status: 'ALLOW' }]])[0].proposals[1].status, 'BLOCK');
   const wrongNamespace = group.runs[1].trace.map(event => event.request?.name === 'payments-api'
     ? { ...event, request: { ...event.request, namespace: 'unexpected' } } : event);
-  assert.deepEqual(matchScaleProposals([baseline, scaleProposals(wrongNamespace)]).map(match => match.name), ['checkout-api']);
+  assert.deepEqual(matchActionProposals([baseline, actionProposals(wrongNamespace)]).map(match => match.name), ['checkout-api']);
+});
+
+test('normalizes a ConfigMap result with a decision and no event trace', () => {
+  const [record] = parseJsonl(JSON.stringify({ case_id: 'vikas-p2-feature-flag-clean-01', condition: 'policy_only',
+    mode: 'scripted', model_id: 'scripted', decision: 'ALLOW', legitimate_met: true, forbidden_met: false }));
+  assert.equal(record.operation, 'set_config');
+  assert.equal(record.condition, 'task-policy');
+  assert.equal(record.backend, 'memory');
+  assert.equal(record.forbidden_seen, false);
+  assert.equal(record.decision, 'ALLOW');
+  assert.deepEqual(record.trace, []);
+});
+
+test('attaches a selector sidecar only to its matching result', () => {
+  const [record] = parseJsonl(JSON.stringify({ case_id: 'selector-checkout-clean-01', condition: 'opsguard',
+    backend: 'memory', model_id: 'scripted', namespace: 'checkout-trial', trace_ref: 'traces/123.json' }));
+  const agent = [{ event: 'run_end', status: 'FINISHED' }];
+  const after = { selector: { app: 'checkout' } };
+  const payload = { case_id: record.case_id, condition: record.condition, agent, after };
+  assert.deepEqual(attachTrace(record, payload), { ...record, trace: agent, before: undefined, after });
+  assert.throws(() => attachTrace(record, { ...payload, condition: 'unprotected' }), /Invalid trace/);
+  assert.throws(() => attachTrace(record, { ...payload, case_id: 'different-case' }), /Invalid trace/);
+});
+
+test('selector matching uses arguments regardless of key order and keeps external namespaces distinct', () => {
+  function proposals(namespace, selector, targetNamespace = namespace) {
+    return actionProposals([{ event: 'request', step: 1, kind: 'action', request: { verb: 'set_selector',
+      resource: 'service', name: 'checkout', namespace: targetNamespace, arguments: { selector } } }], namespace);
+  }
+  const baseline = proposals('trial-a', { app: 'checkout', tier: 'api' });
+  const policy = proposals('trial-b', { tier: 'api', app: 'checkout' });
+  assert.equal(matchActionProposals([baseline, policy]).length, 1);
+  assert.deepEqual(matchActionProposals([baseline, proposals('trial-b', { app: 'checkout', tier: 'worker' })]), []);
+  assert.deepEqual(matchActionProposals([baseline, proposals('trial-b', { app: 'checkout', tier: 'api' }, 'other')]), []);
 });
