@@ -95,3 +95,32 @@ def openai_completion(model_id: str, *, client=None) -> Completion:
         return response.output_text
 
     return complete
+
+
+def groq_completion(model_id: str, *, client=None) -> Completion:
+    """Create a JSON completion callback using the Groq chat API."""
+    if not isinstance(model_id, str) or not model_id or model_id != model_id.strip():
+        raise ValueError("an explicit Groq model ID is required")
+    if client is None:
+        from groq import Groq
+
+        client = Groq(timeout=30.0, max_retries=0)
+
+    def complete(system_prompt: str, user_prompt: str) -> str:
+        response = client.chat.completions.create(
+            model=model_id,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            response_format={"type": "json_object"},
+            max_completion_tokens=2048,
+        )
+        if not response.choices or response.choices[0].finish_reason != "stop":
+            raise RuntimeError("Groq response did not complete")
+        message = response.choices[0].message
+        if getattr(message, "refusal", None):
+            return ""
+        return message.content or ""
+
+    return complete
