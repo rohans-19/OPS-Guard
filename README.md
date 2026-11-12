@@ -152,6 +152,10 @@ See the [demo walkthrough](frontend/README.md) for launch and trace import steps
 
 [Agent workstream handoff](documentations/AGENT_WORKSTREAM_HANDOFF.md) tracks the role swap, verified results, and team integration tasks.
 
+### 8. Benchmark Runner, State Oracle and Selector Repair
+
+[Benchmark runner, state oracle and selector repair](documentations/BENCHMARK_RUNNER_AND_SELECTORS.md) covers the common runner and its one-case command, case and result contracts, oracle predicates, the `set_selector` operation and its cases, result merging, paired statistics, figures, and CI.
+
 ---
 
 ## Development and Contribution
