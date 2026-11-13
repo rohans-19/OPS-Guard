@@ -84,6 +84,24 @@ def test_form_sets_exact_scale_authority():
     assert "payments-api" in intent.protected_deployments
 
 
+def test_verified_completion_stops_without_fabricating_a_model_finish():
+    from opsguard.agent.loop import run_agent
+    from opsguard.agent.models import ScriptedModel
+    from opsguard.agent.interfaces import GatewayResult
+    async def check():
+        completion = asyncio.Event()
+        class Gateway:
+            async def read(self,request,**kwargs):
+                completion.set()
+                return GatewayResult(status="OK",reason="STATE_OBSERVED")
+        model = ScriptedModel([json.dumps({"kind":"read","request":{"tool":"get_deployment","namespace":"shop","name":"checkout-api"}})])
+        result = await run_agent(task_id="demo-test",user_task="Scale checkout",model=model,gateway=Gateway(),completion=completion)
+        assert result.status == "COMPLETION_VERIFIED"
+        assert result.steps == 1
+        assert len([e for e in result.trace if e["event"]=="model"]) == 1
+    asyncio.run(check())
+
+
 def test_event_log_preserves_order_and_stage_duration(tmp_path):
     run = LiveRun(RunRequest(prompt="Scale checkout"),tmp_path,"test",9093)
     run.emit({"event":"execution","elapsed_ms":23,"status":"APPLIED"})

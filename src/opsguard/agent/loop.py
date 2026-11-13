@@ -65,19 +65,28 @@ class _StopRequested(Exception):
     pass
 
 
-async def _bounded_call(make_call, *, deadline: float, stop: asyncio.Event | None):
+class _CompletionVerified(Exception):
+    pass
+
+
+async def _bounded_call(make_call, *, deadline: float, stop: asyncio.Event | None, completion: asyncio.Event | None = None):
     remaining = deadline - monotonic()
     if stop is not None and stop.is_set():
         raise _StopRequested
+    if completion is not None and completion.is_set():
+        raise _CompletionVerified
     if remaining <= 0:
         raise TimeoutError
     work = asyncio.ensure_future(make_call(remaining))
     cancellation = asyncio.create_task(stop.wait()) if stop is not None else None
-    tasks = {work, cancellation} if cancellation is not None else {work}
+    verified = asyncio.create_task(completion.wait()) if completion is not None else None
+    tasks = {task for task in (work,cancellation,verified) if task is not None}
     try:
         await asyncio.wait(tasks, timeout=remaining, return_when=asyncio.FIRST_COMPLETED)
         if cancellation is not None and cancellation.done():
             raise _StopRequested
+        if verified is not None and verified.done() and not work.done():
+            raise _CompletionVerified
         if not work.done() or monotonic() >= deadline:
             raise TimeoutError
         return work.result()
@@ -94,6 +103,7 @@ async def run_agent(
     stop: asyncio.Event | None = None, capture_synthetic_transcript: bool = False,
     initial_observation: GatewayResult | None = None,
     on_event=None,
+    completion: asyncio.Event | None = None,
 ) -> AgentRun:
     if prompt_mode not in ("unprotected", "hardened"):
         raise ValueError("unsupported prompt mode")
@@ -144,7 +154,7 @@ async def run_agent(
                 on_event({"event":"model_start", "step":step_number + 1, "model":model.model_id})
             reply: ModelReply = await _bounded_call(
                 lambda timeout: model.complete(tuple(messages), schema=schema, timeout_seconds=timeout),
-                deadline=deadline, stop=stop,
+                deadline=deadline, stop=stop, completion=completion,
             )
             step_number += 1
             trace.append({"event": "model", "step": step_number, "model": model.model_id,
@@ -168,14 +178,14 @@ async def run_agent(
                 result = await _bounded_call(
                     lambda timeout: gateway.propose(step.request, task_id=task_id, timeout_seconds=timeout,
                                                      observation_ids=tuple(step.observation_ids)),
-                    deadline=deadline, stop=stop,
+                    deadline=deadline, stop=stop, completion=completion,
                 )
                 if not isinstance(result, GatewayResult) or result.status == "OK":
                     raise ValueError("invalid action result")
             elif isinstance(step, ReadStep):
                 result = await _bounded_call(
                     lambda timeout: gateway.read(step.request, task_id=task_id, timeout_seconds=timeout),
-                    deadline=deadline, stop=stop,
+                    deadline=deadline, stop=stop, completion=completion,
                 )
                 if not isinstance(result, GatewayResult) or result.status not in ("OK", "BLOCK", "ERROR"):
                     raise ValueError("invalid read result")
@@ -191,6 +201,8 @@ async def run_agent(
                 denials[key] = denials.get(key, 0) + 1
                 if denials[key] >= limits.max_identical_denials:
                     return finish("REPEATED_DENIAL")
+    except _CompletionVerified:
+        return finish("COMPLETION_VERIFIED", "Independent observer verified the requested outcome.")
     except _StopRequested:
         return finish("CANCELLED")
     except TimeoutError:
