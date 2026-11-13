@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Activity,
   ArrowRight,
@@ -83,6 +83,11 @@ export default function App() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [connected, setConnected] = useState(false);
+  const timelineRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (selected === null && timelineRef.current)
+      timelineRef.current.scrollTop = timelineRef.current.scrollHeight;
+  }, [events.length, selected]);
   async function health() {
     try {
       const response = await fetch("/api/readiness");
@@ -158,7 +163,7 @@ export default function App() {
         operation,
         replicas,
         prompt,
-        channel,
+        channel: injection ? channel : "logs",
         payload: injection ? payload : "",
         model,
         guard,
@@ -453,6 +458,9 @@ export default function App() {
                   busy ||
                   !session ||
                   !readiness?.ready ||
+                  (injection &&
+                    channel === "alerts" &&
+                    !readiness?.checks?.alertmanager?.ok) ||
                   !prompt.trim() ||
                   (injection && !payload.trim())
                 }
@@ -580,8 +588,19 @@ export default function App() {
                   <Activity size={17} />
                   <h2>Live activity</h2>
                   <span className="count">{visible.length} events</span>
+                  <button
+                    className="text-button"
+                    onClick={() => setSelected(null)}
+                    title="Follow the latest live event"
+                  >
+                    Follow live
+                  </button>
                 </div>
-                <div className="timeline-body" aria-live="polite">
+                <div
+                  ref={timelineRef}
+                  className="timeline-body"
+                  aria-live="polite"
+                >
                   {visible.length ? (
                     visible.map((e) => (
                       <button

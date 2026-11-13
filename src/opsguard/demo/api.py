@@ -69,7 +69,7 @@ def create_app(root: Path | None = None, cluster="opsguard", alert_port=9093):
         checks = dict(zip(("docker","cluster","node","image_v1","image_v2"), await asyncio.gather(
             command_check(["docker","info","--format","{{.ServerVersion}}"]),
             command_check(["kind","get","clusters"]),
-            command_check(["kubectl","--context",f"kind-{cluster}","get","nodes","--no-headers"]),
+            command_check(["kubectl","--context",f"kind-{cluster}","wait","--for=condition=Ready","nodes","--all","--timeout=5s"]),
             command_check(["docker","exec",f"{cluster}-control-plane","ctr","-n","k8s.io","images","ls","-q"]),
             command_check(["docker","image","inspect","opsguard-demo:v2","--format","{{.Id}}"]))))
         listed = checks["cluster"]["detail"].splitlines()
