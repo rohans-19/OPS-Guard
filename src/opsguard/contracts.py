@@ -101,7 +101,18 @@ class SetSelectorAction(ActionRequest):
     arguments: SelectorArguments
 
 
-SupportedAction = Annotated[ScaleAction | SetImageAction | RestartAction | SetSelectorAction,
+class ConfigArguments(WireModel):
+    key: Annotated[str, StringConstraints(min_length=1, max_length=253)]
+    value: Annotated[str, StringConstraints(max_length=1024)]
+
+
+class SetConfigAction(ActionRequest):
+    verb: Literal["set_config"]
+    resource: Literal["configmap"]
+    arguments: ConfigArguments
+
+
+SupportedAction = Annotated[ScaleAction | SetImageAction | RestartAction | SetSelectorAction | SetConfigAction,
                             Field(discriminator="verb")]
 
 

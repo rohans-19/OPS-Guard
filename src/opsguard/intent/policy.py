@@ -4,10 +4,10 @@ from typing import Literal
 
 from pydantic import TypeAdapter
 
-from opsguard.contracts import ActionRequest, ScaleAction, SetImageAction, SetSelectorAction, SupportedAction, WireModel
+from opsguard.contracts import ActionRequest, ScaleAction, SetImageAction, SetSelectorAction, SetConfigAction, SupportedAction, WireModel
 from opsguard.intent.evidence import EvidenceRegistry
 from opsguard.intent.inventory import InventorySnapshot
-from opsguard.intent.models import ImagePermission, ScalePermission, SelectorPermission, TaskIntent
+from opsguard.intent.models import ConfigPermission, ImagePermission, ScalePermission, SelectorPermission, TaskIntent
 from opsguard.intent.resolver import TargetResolution, resolve_service, resolve_target, selector_backends
 
 
@@ -27,28 +27,40 @@ def evaluate_policy(
     request: ActionRequest | dict, *, intent: TaskIntent, task_id: str,
     inventory: InventorySnapshot, evidence: EvidenceRegistry | None = None,
     observation_ids: tuple[str, ...] = (),
+    on_check=None,
 ) -> PolicyResult:
+    def passed(name):
+        if on_check:
+            on_check({"check":name, "status":"PASS"})
     def block(reason):
+        if on_check:
+            on_check({"check":reason, "status":"BLOCK"})
         return PolicyResult(status="BLOCK", reason=reason)
 
     if task_id != intent.task_id:
         return block("TASK_ID_MISMATCH")
+    passed("TASK_ID_MATCHES")
     try:
         action = TypeAdapter(SupportedAction).validate_python(
             request.model_dump() if isinstance(request, ActionRequest) else request,
         )
     except ValueError:
         return block("UNSUPPORTED_OR_INVALID_ACTION")
+    passed("ACTION_SCHEMA_VALID")
     if action.namespace != intent.namespace:
         return block("NAMESPACE_MISMATCH")
+    passed("NAMESPACE_AUTHORIZED")
     protected = intent.protected_services if action.resource == "service" else intent.protected_deployments
     if action.name in protected:
         return block("PROTECTED_TARGET")
+    passed("TARGET_NOT_PROTECTED")
     if observation_ids and (evidence is None or not evidence.contains(task_id, observation_ids)):
         return block("UNKNOWN_OBSERVATION")
+    passed("EVIDENCE_REFERENCES_VALID")
     permission = next((rule for rule in intent.permissions if rule.verb == action.verb), None)
     if permission is None:
         return block("OPERATION_NOT_AUTHORIZED")
+    passed("OPERATION_AUTHORIZED")
     if isinstance(action, ScaleAction):
         if not isinstance(permission, ScalePermission) or not (
             permission.min_replicas <= action.arguments.replicas <= permission.max_replicas
@@ -60,14 +72,29 @@ def evaluate_policy(
         if action.arguments.image not in permission.images:
             return block("IMAGE_NOT_AUTHORIZED")
 
-    if isinstance(action, SetSelectorAction):
-        return _selector_policy(action, intent, permission, inventory)
+    if isinstance(action, SetConfigAction):
+        if not isinstance(permission, ConfigPermission) or action.arguments.key != permission.key or action.arguments.value not in permission.values:
+            return block("CONFIG_VALUE_NOT_AUTHORIZED")
+        if intent.target.resource != "configmap" or action.name != intent.target.name:
+            return block("TASK_SCOPE_MISMATCH")
 
+    if isinstance(action, SetSelectorAction):
+        outcome = _selector_policy(action, intent, permission, inventory)
+        if on_check:
+            on_check({"check":outcome.reason, "status":outcome.status})
+        return outcome
+
+    passed("ARGUMENTS_AUTHORIZED")
     resolution = resolve_target(intent, inventory)
+    if on_check:
+        on_check({"check":"TARGET_RESOLUTION", "status":resolution.status, "resolution":resolution.model_dump()})
     if resolution.status != "PASS":
         return PolicyResult(status=resolution.status, reason=resolution.reason, resolution=resolution)
     if action.name != resolution.target.name:
+        if on_check:
+            on_check({"check":"TASK_SCOPE_MISMATCH", "status":"BLOCK", "expected":resolution.target.name, "actual":action.name})
         return PolicyResult(status="BLOCK", reason="TASK_SCOPE_MISMATCH", resolution=resolution)
+    passed("TARGET_MATCHES_AUTHORIZATION")
     # Model-provided observation references are diagnostics only. Evidence never
     # becomes an authority, even when its text repeats an authorized value.
     fields = ("task_id", "namespace", "verb", *[f"arguments.{name}" for name in type(action.arguments).model_fields])

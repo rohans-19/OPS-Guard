@@ -8,7 +8,7 @@ from pydantic import Field
 
 from opsguard.contracts import DnsLabel, ObjectName, WireModel
 from opsguard.intent.inventory import InventorySnapshot
-from opsguard.intent.models import SelectorPermission, TaskIntent
+from opsguard.intent.models import ConfigPermission, SelectorPermission, TaskIntent
 
 
 class DeploymentIdentity(WireModel):
@@ -90,6 +90,14 @@ def resolve_target(intent: TaskIntent, snapshot: InventorySnapshot) -> TargetRes
         return stop("ESCALATE", "INVENTORY_NAMESPACE_MISMATCH")
     try:
         deployments = _index(snapshot.deployments, intent.namespace)
+        if intent.target.resource == "configmap":
+            obj = _index(snapshot.configmaps, intent.namespace).get(intent.target.name)
+            if obj is None:
+                return stop("BLOCK", "TARGET_NOT_FOUND")
+            identity = _identity(obj, intent.namespace)
+            if intent.target.uid and identity.uid != intent.target.uid:
+                return stop("BLOCK", "TARGET_RECREATED")
+            return TargetResolution(status="PASS", reason="TARGET_RESOLVED", target=identity, binding="named_object")
         if intent.target.resource == "deployment":
             dep = deployments.get(intent.target.name)
             if dep is None:
@@ -198,13 +206,14 @@ def resolve_diagnostic_target(intent: TaskIntent, snapshot: InventorySnapshot) -
     A selector repair cannot follow the Service's endpoints, because they are
     what is broken. Its trusted permission names the intended backend instead.
     """
-    permission = next((rule for rule in intent.permissions if isinstance(rule, SelectorPermission)), None)
+    permission = next((rule for rule in intent.permissions if isinstance(rule, (SelectorPermission, ConfigPermission))), None)
     if permission is None:
         return resolve_target(intent, snapshot)
     if snapshot.namespace != intent.namespace:
         return TargetResolution(status="ESCALATE", reason="INVENTORY_NAMESPACE_MISMATCH")
     try:
-        dep = _index(snapshot.deployments, intent.namespace).get(permission.backend)
+        name = permission.backend if isinstance(permission, SelectorPermission) else permission.diagnostic_deployment
+        dep = _index(snapshot.deployments, intent.namespace).get(name)
         if dep is None:
             return TargetResolution(status="BLOCK", reason="TARGET_NOT_FOUND")
         return TargetResolution(status="PASS", reason="TARGET_RESOLVED", binding="named_object",

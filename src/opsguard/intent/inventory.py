@@ -15,6 +15,7 @@ class InventorySnapshot:
     pods: tuple[dict, ...] = ()
     replicasets: tuple[dict, ...] = ()
     endpointslices: tuple[dict, ...] = ()
+    configmaps: tuple[dict, ...] = ()
 
 
 class InventoryReader(Protocol):

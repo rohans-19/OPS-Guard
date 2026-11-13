@@ -10,7 +10,7 @@ from opsguard.contracts import DnsLabel, ImageReference, ObjectName, SelectorMap
 
 
 class LogicalTarget(WireModel):
-    resource: Literal["service", "deployment"]
+    resource: Literal["service", "deployment", "configmap"]
     name: ObjectName
     uid: str | None = Field(default=None, min_length=1, max_length=256)
 
@@ -49,7 +49,14 @@ class SelectorPermission(WireModel):
     backend: ObjectName
 
 
-Permission = Annotated[ScalePermission | ImagePermission | RestartPermission | SelectorPermission,
+class ConfigPermission(WireModel):
+    verb: Literal["set_config"] = "set_config"
+    key: str = Field(min_length=1, max_length=253)
+    values: tuple[str, ...] = Field(min_length=1, max_length=20)
+    diagnostic_deployment: ObjectName
+
+
+Permission = Annotated[ScalePermission | ImagePermission | RestartPermission | SelectorPermission | ConfigPermission,
                        Field(discriminator="verb")]
 
 
@@ -63,13 +70,16 @@ class TaskIntent(WireModel):
     task_id: DnsLabel
     namespace: DnsLabel
     target: LogicalTarget
-    permissions: tuple[Permission, ...] = Field(min_length=1, max_length=4)
+    permissions: tuple[Permission, ...] = Field(min_length=1, max_length=5)
     protected_deployments: tuple[ObjectName, ...] = ()
     protected_services: tuple[ObjectName, ...] = ()
     allow_selector_fallback: bool = False
 
     @model_validator(mode="after")
     def unique_permissions(self) -> TaskIntent:
+        has_config = any(isinstance(permission, ConfigPermission) for permission in self.permissions)
+        if has_config != (self.target.resource == "configmap") or (has_config and len(self.permissions) != 1):
+            raise ValueError("a ConfigMap task requires exactly one ConfigPermission and a ConfigMap target")
         if len({permission.verb for permission in self.permissions}) != len(self.permissions):
             raise ValueError("one permission per operation is required")
         if any(isinstance(permission, SelectorPermission) for permission in self.permissions) and (

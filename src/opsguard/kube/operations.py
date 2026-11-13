@@ -24,6 +24,7 @@ class LabBounds:
     restarts: frozenset[tuple[str, str]] = frozenset()
     # Service -> the whole selector maps (as sorted item tuples) any condition may write.
     selectors: Mapping[tuple[str, str], frozenset[SelectorKey]] = field(default_factory=dict)
+    configs: Mapping[tuple[str, str, str], frozenset[str]] = field(default_factory=dict)
 
     def __post_init__(self):
         from opsguard.contracts import DnsLabel
@@ -32,13 +33,14 @@ class LabBounds:
         object.__setattr__(self, "images", MappingProxyType({key: frozenset(values) for key, values in self.images.items()}))
         object.__setattr__(self, "restarts", frozenset(self.restarts))
         object.__setattr__(self, "selectors", MappingProxyType({key: frozenset(values) for key, values in self.selectors.items()}))
-        if any(key[0] != self.namespace for group in (self.scales, self.images, self.restarts, self.selectors) for key in group):
+        object.__setattr__(self, "configs", MappingProxyType({key: frozenset(values) for key, values in self.configs.items()}))
+        if any(key[0] != self.namespace for group in (self.scales, self.images, self.restarts, self.selectors, self.configs) for key in group):
             raise ValueError("lab bounds must use the configured namespace")
 
 
 class PreparedMutation(WireModel):
     preparation_id: str
-    operation: Literal["scale", "set_image", "restart", "set_selector"]
+    operation: Literal["scale", "set_image", "restart", "set_selector", "set_config"]
     target: DeploymentIdentity
     method: Literal["PUT", "PATCH"]
     path: str
@@ -78,6 +80,24 @@ def _selector(action, service, bounds):
                  "PATCH", "application/json-patch+json")
 
 
+def _config(action, obj, bounds):
+    from opsguard.operations.set_config import prepare_set_config
+    prepared = prepare_set_config(action.model_dump(), lab_values=bounds.configs)
+    meta = obj["metadata"]
+    if (prepared.namespace, prepared.name) != (meta["namespace"], meta["name"]):
+        raise ValueError("ConfigMap identity mismatch")
+    target = DeploymentIdentity(namespace=meta["namespace"], name=meta["name"], uid=meta["uid"], resource_version=meta["resourceVersion"])
+    escape = lambda value: value.replace("~", "~0").replace("/", "~1")
+    if not isinstance(obj.get("data"), dict):
+        raise ValueError("ConfigMap needs a data map")
+    body = [{"op":"test", "path":"/metadata/uid", "value":target.uid},
+            {"op":"test", "path":"/metadata/resourceVersion", "value":target.resource_version},
+            {"op":"add", "path":"/data/" + escape(prepared.key), "value":prepared.value}]
+    return PreparedMutation(preparation_id=uuid4().hex, operation="set_config", target=target,
+        method="PATCH", path=f"/api/v1/namespaces/{target.namespace}/configmaps/{target.name}",
+        content_type="application/json-patch+json", body_json=json.dumps(body))
+
+
 class OperationRegistry:
     """Register code-owned handlers at application startup, never through a model tool."""
 
@@ -104,6 +124,6 @@ class OperationRegistry:
 def default_registry() -> OperationRegistry:
     registry = OperationRegistry()
     for verb, handler in (("scale", _scale), ("set_image", _image), ("restart", _restart),
-                          ("set_selector", _selector)):
+                          ("set_selector", _selector), ("set_config", _config)):
         registry.register(verb, handler)
     return registry
