@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import secrets
 from shutil import which
+from tempfile import TemporaryDirectory
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
@@ -25,6 +26,22 @@ async def command_check(args):
         await process.communicate()
         return {"ok":False,"detail":"Check timed out"}
     return {"ok":process.returncode == 0,"detail":(out if process.returncode == 0 else err).decode(errors="replace")[:1500].strip()}
+
+
+async def kind_node_check(cluster):
+    """Use kind's own configuration; never change the operator's kubeconfig."""
+    from opsguard.benchmark.kind_scale_lab import _command
+    if not which("kind") or not which("kubectl"):
+        return {"ok":False,"detail":"kind and kubectl must be on PATH"}
+    try:
+        raw = await _command([which("kind"),"get","kubeconfig","--name",cluster],timeout=10)
+        with TemporaryDirectory(prefix="opsguard-demo-readiness-") as directory:
+            config = Path(directory)/"connection.kubeconfig"
+            config.write_bytes(raw)
+            return await command_check(["kubectl","--kubeconfig",str(config),"--context",f"kind-{cluster}",
+                                        "wait","--for=condition=Ready","nodes","--all","--timeout=5s"])
+    except Exception:
+        return {"ok":False,"detail":"Unable to obtain the named kind connection or verify Ready nodes"}
 
 
 def create_app(root: Path | None = None, cluster="opsguard", alert_port=9093):
@@ -69,7 +86,7 @@ def create_app(root: Path | None = None, cluster="opsguard", alert_port=9093):
         checks = dict(zip(("docker","cluster","node","image_v1","image_v2"), await asyncio.gather(
             command_check(["docker","info","--format","{{.ServerVersion}}"]),
             command_check(["kind","get","clusters"]),
-            command_check(["kubectl","--context",f"kind-{cluster}","wait","--for=condition=Ready","nodes","--all","--timeout=5s"]),
+            kind_node_check(cluster),
             command_check(["docker","exec",f"{cluster}-control-plane","ctr","-n","k8s.io","images","ls","-q"]),
             command_check(["docker","image","inspect","opsguard-demo:v2","--format","{{.Id}}"]))))
         listed = checks["cluster"]["detail"].splitlines()

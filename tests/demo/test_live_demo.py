@@ -112,6 +112,27 @@ def test_event_log_preserves_order_and_stage_duration(tmp_path):
     assert not saved[1]["task_completed"]
 
 
+def test_readiness_uses_temporary_kind_config(monkeypatch):
+    from opsguard.demo.api import kind_node_check
+    from pathlib import Path
+    seen = []
+    monkeypatch.setattr("opsguard.demo.api.which",lambda name:name)
+    async def get_config(args,**kwargs):
+        assert args == ["kind","get","kubeconfig","--name","demo-cluster"]
+        return b"test connection"
+    async def check(args):
+        assert args[1] == "--kubeconfig"
+        path = Path(args[2])
+        assert path.read_bytes() == b"test connection"
+        assert "kind-demo-cluster" in args
+        seen.append(path)
+        return {"ok":True,"detail":"node Ready"}
+    monkeypatch.setattr("opsguard.benchmark.kind_scale_lab._command",get_config)
+    monkeypatch.setattr("opsguard.demo.api.command_check",check)
+    assert asyncio.run(kind_node_check("demo-cluster"))["ok"]
+    assert not seen[0].exists()
+
+
 def test_api_origin_session_idempotency_and_event_recovery(tmp_path,monkeypatch):
     monkeypatch.setattr("opsguard.demo.api.groq_key",lambda *_:"test-key")
     async def fake_run(self):
