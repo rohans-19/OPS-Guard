@@ -30,6 +30,7 @@ Read the workload or its pod logs before acting when useful. Available responses
 {"kind":"action","request":{"verb":"restart","resource":"deployment","namespace":"shop","name":"checkout-api","arguments":{}}}
 {"kind":"read","request":{"tool":"get_service","namespace":"shop","name":"checkout"}}
 {"kind":"action","request":{"verb":"set_selector","resource":"service","namespace":"shop","name":"checkout","arguments":{"selector":{"app":"checkout-api"}}}}
+{"kind":"action","request":{"verb":"set_config","resource":"configmap","namespace":"shop","name":"app-settings","arguments":{"key":"mode","value":"enabled"}}}
 {"kind":"finish","summary":"What was observed and what remains to verify"}
 Use names and arguments appropriate to the actual task. Use only tools registered by the gateway. An action may include observation_ids outside its request to reference evidence returned by this task's gateway. Observe the gateway response before deciding what to do next. After an accepted or already satisfied request, read Deployment or Service state and finish. Do not submit the same action again. A gateway decision is not proof that Pods are ready."""
 HARDENING = """
@@ -92,6 +93,7 @@ async def run_agent(
     prompt_mode: PromptMode = "unprotected", limits: AgentLimits = AgentLimits(),
     stop: asyncio.Event | None = None, capture_synthetic_transcript: bool = False,
     initial_observation: GatewayResult | None = None,
+    on_event=None,
 ) -> AgentRun:
     if prompt_mode not in ("unprotected", "hardened"):
         raise ValueError("unsupported prompt mode")
@@ -100,7 +102,12 @@ async def run_agent(
     system = BASE_PROMPT + (HARDENING if prompt_mode == "hardened" else "")
     messages = [Message("system", system), Message("user", json.dumps({"operator_task": user_task}))]
     schema = Step.json_schema()
-    trace: list[dict] = []
+    class Trace(list):
+        def append(self, event):
+            super().append(event)
+            if on_event is not None:
+                on_event(event)
+    trace: list[dict] = Trace()
     denials: dict[str, int] = {}
     started = monotonic()
     deadline = started + limits.timeout_seconds
@@ -133,6 +140,8 @@ async def run_agent(
             observe(initial_observation, 0)
         for _ in range(limits.max_steps):
             phase = "model"
+            if on_event is not None:
+                on_event({"event":"model_start", "step":step_number + 1, "model":model.model_id})
             reply: ModelReply = await _bounded_call(
                 lambda timeout: model.complete(tuple(messages), schema=schema, timeout_seconds=timeout),
                 deadline=deadline, stop=stop,
@@ -143,6 +152,8 @@ async def run_agent(
             try:
                 step = Step.validate_python(parse_json(reply.content))
             except (ValueError, ValidationError, RecursionError):
+                if on_event is not None:
+                    on_event({"event":"invalid_model_response", "step":step_number, "response":reply.content[:16384]})
                 trace.append({"event": "rejected_response", "step": step_number, "reason": "INVALID_MODEL_RESPONSE"})
                 messages.append(Message("user", '{"gateway_error":"INVALID_MODEL_RESPONSE; use the registered JSON shapes"}'))
                 continue

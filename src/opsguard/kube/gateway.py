@@ -31,7 +31,7 @@ class ExecutionGateway:
     """
 
     def __init__(self, inventory, executor: MutationExecutor, *, intent, enforce_task_policy=True,
-                 alerts=None, runbooks=None, kubernetes_evidence=None, impact_decider=None):
+                 alerts=None, runbooks=None, kubernetes_evidence=None, impact_decider=None, on_event=None):
         if intent.namespace != executor.bounds.namespace:
             raise ValueError("intent and executor namespaces differ")
         self.inventory_reader, self.executor, self.intent = inventory, executor, intent
@@ -42,6 +42,7 @@ class ExecutionGateway:
         self.audit: list[dict] = []
         self._lock = asyncio.Lock()
         self._restarted: set[tuple[str, str]] = set()
+        self.on_event = on_event or (lambda event: None)
 
     async def read(self, request, *, task_id, timeout_seconds):
         if task_id != self.intent.task_id or request.namespace != self.intent.namespace:
@@ -124,6 +125,7 @@ class ExecutionGateway:
         def result(status, reason, **data):
             data["decision_ms"] = decision_ms if decision_ms is not None else round((monotonic() - started)*1000, 3)
             data["gateway_ms"] = round((monotonic() - started)*1000, 3)
+            self.on_event({"event":"decision_result", "decision_id":decision_id, "status":status, "reason":reason, **data})
             return GatewayResult(status=status, reason=reason, decision_id=decision_id, data=data)
         if self.executor.write_outcome_unknown:
             return result("ERROR", "RECONCILIATION_REQUIRED", write_outcome_unknown=True)
@@ -132,13 +134,16 @@ class ExecutionGateway:
         if not self.evidence.contains(task_id, observation_ids):
             return result("BLOCK", "UNKNOWN_OBSERVATION")
         before = await self.inventory_reader.inventory(timeout_seconds=remaining())
+        self.on_event({"event":"inventory", "decision_id":decision_id, "snapshot":__import__('dataclasses').asdict(before)})
         policy = None
         if self.enforce_task_policy:
             policy = evaluate_policy(request, intent=self.intent, task_id=task_id, inventory=before,
-                                     evidence=self.evidence, observation_ids=observation_ids)
+                                     evidence=self.evidence, observation_ids=observation_ids,
+                                     on_check=lambda check: self.on_event({"event":"policy_check", "decision_id":decision_id, **check}))
+            self.on_event({"event":"policy", "decision_id":decision_id, **policy.model_dump(mode="json")})
             if policy.status != "PASS":
                 return result(policy.status, policy.reason)
-        pool = before.services if request.resource == "service" else before.deployments
+        pool = {"service":before.services, "configmap":before.configmaps, "deployment":before.deployments}[request.resource]
         targets = [obj for obj in pool if obj["metadata"]["name"] == request.name
                    and obj["metadata"].get("namespace", request.namespace) == request.namespace]
         if len(targets) != 1:
@@ -155,9 +160,11 @@ class ExecutionGateway:
             return result("ALLOW", "ALREADY_RESTARTED_FOR_TASK")
         audit = {"decision_id": decision_id, "prepared": prepared.model_dump(), "before": targets[0]}
         self.audit.append(audit)
+        self.on_event({"event":"prepared", **audit})
         try:
             preview = await self.executor.preview(prepared, timeout_seconds=remaining())
             audit["preview"] = preview.model_dump()
+            self.on_event({"event":"preview", "decision_id":decision_id, **preview.model_dump()})
             if preview.status != "PREVIEWED":
                 return result(preview.status, preview.reason, preview_ms=preview.elapsed_ms,
                               write_outcome_unknown=False, requires_reevaluation=preview.requires_reevaluation)
@@ -166,7 +173,9 @@ class ExecutionGateway:
             current = await self.inventory_reader.inventory(timeout_seconds=remaining())
             if self.enforce_task_policy:
                 latest = evaluate_policy(request, intent=self.intent, task_id=task_id, inventory=current,
-                                         evidence=self.evidence, observation_ids=observation_ids)
+                                         evidence=self.evidence, observation_ids=observation_ids,
+                                         on_check=lambda check: self.on_event({"event":"recheck", "decision_id":decision_id, **check}))
+                self.on_event({"event":"policy_recheck", "decision_id":decision_id, **latest.model_dump(mode="json")})
                 if latest.status != "PASS":
                     return result(latest.status, latest.reason, requires_reevaluation=True)
                 if latest.resolution.target != prepared.target:
@@ -176,9 +185,11 @@ class ExecutionGateway:
                 decision = await asyncio.wait_for(self.impact_decider(request, before, current, preview.object), remaining())
                 decision = GuardDecision.model_validate(decision)
             audit["decision"] = decision.model_dump()
+            self.on_event({"event":"impact_decision", "decision_id":decision_id, **decision.model_dump()})
             decision_ms = round((monotonic()-started)*1000,3)
             outcome = await self.executor.execute(prepared, decision=decision.status, timeout_seconds=remaining())
             audit["execution"] = outcome.model_dump()
+            self.on_event({"event":"execution", "decision_id":decision_id, **outcome.model_dump()})
             if outcome.status == "APPLIED" and request.verb == "restart":
                 self._restarted.add((prepared.target.name, prepared.target.uid))
             return result("ALLOW" if outcome.status == "APPLIED" else outcome.status,

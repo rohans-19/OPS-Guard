@@ -101,7 +101,7 @@ class KubernetesRestartObserver:
 
 @asynccontextmanager
 async def open_kind_execution_lab(*, root: Path, cluster: str, workloads: dict, image: str,
-                                  log_target="", log_line="", configmap_text="No incident override."):
+                                  log_target="", log_line="", configmap_text="No incident override.", manifest_transform=None):
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,40}", cluster):
         raise ValueError("explicit kind cluster name required")
     # This is an explicit opt-in lab. No default mutable image is silently pulled.
@@ -129,6 +129,8 @@ async def open_kind_execution_lab(*, root: Path, cluster: str, workloads: dict, 
         try:
             manifest = lab_manifest(namespace, workloads, (root / "benchmark/fixtures/scale/app.py").read_text(encoding="utf-8"), image,
                                     log_target=log_target,log_line=log_line,configmap_text=configmap_text)
+            if manifest_transform is not None:
+                manifest = manifest_transform(manifest, namespace)
             identities = [obj for obj in manifest["items"] if obj["kind"] in ("ServiceAccount", "Role", "RoleBinding")]
             scoped = [*base, "-n", namespace]
             await _command([*scoped, "apply", "-f", "-"], payload=json.dumps({"apiVersion": "v1", "kind": "List", "items": identities}).encode())
