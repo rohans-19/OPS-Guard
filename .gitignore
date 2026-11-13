@@ -22,3 +22,8 @@ results/
 
 # Local review artifacts are not official project documentation
 PROJECT_STATUS_REVIEW.md
+
+# React demo build outputs
+node_modules/
+dist/
+*.tsbuildinfo
