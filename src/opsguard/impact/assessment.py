@@ -14,8 +14,16 @@ def decide_with_impact(
     irreversibility: float,
     impact: Optional[ImpactEstimate] = None,
     settings: RiskSettings = RiskSettings(),
+    escalate_on_degradation: bool = True,
 ) -> GuardDecision:
-    """Score predicted degradation and withhold writes when the effect is uncertain."""
+    """Score predicted degradation and withhold writes when the effect is uncertain.
+
+    A predicted Service outage is never allowed automatically, whatever the
+    weighted score: an authorized action that takes a Service down still needs
+    a person to approve it. ``escalate_on_degradation=False`` reproduces the
+    v1.0-reference behaviour, where only the weighted score and uncertainty
+    could withhold a write, for comparison runs.
+    """
     degraded = impact.degraded_services if impact is not None else ()
     if policy_outcome != "PASS":
         return decide_risk(
@@ -39,6 +47,8 @@ def decide_with_impact(
         predicted_affected_services=degraded,
         settings=settings,
     )
+    if decision.decision == "ALLOW" and degraded and escalate_on_degradation:
+        return replace(decision, decision="ESCALATE", reason_code="impact_degradation")
     if decision.decision == "ALLOW" and impact.uncertain_services:
         return replace(decision, decision="ESCALATE", reason_code="impact_uncertain")
     return decision
