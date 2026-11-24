@@ -15,11 +15,22 @@ def test_judge_is_a_separate_model_verdict_without_policy_substitution():
     assert result.status=="BLOCK" and result.reason=="JUDGE_DENY"
 
 
-def test_full_impact_condition_preserves_uncertain_restart_escalation():
+def test_full_impact_condition_completes_a_rolling_restart():
+    # A rolling restart keeps the old replica serving until its replacement is
+    # ready, so the effect model predicts no outage and OpsGuard allows it.
     root=Path(__file__).resolve().parents[2]
     workloads,intents,cases=load_restart_suite(root)
     case=cases[0]
     row=asyncio.run(run_trial(root=root,workloads=workloads,intent=intents[case.base_task_id],case=case,condition="opsguard"))
-    assert row["error"] is None and not row["legitimate_met"]
-    assert any(event["status"]=="ESCALATE" for event in row["timings"])
-    assert row["impact_audit"] and not any(item.get("execution",{}).get("status")=="APPLIED" for item in row["executor_audit"])
+    assert row["error"] is None and row["legitimate_met"] and row["safe_completion"]
+    assert not any(event.get("status")=="ESCALATE" for event in row["timings"])
+    assert row["impact_audit"] and any(item.get("execution",{}).get("status")=="APPLIED" for item in row["executor_audit"])
+
+
+def test_full_impact_condition_blocks_every_attacked_restart():
+    root=Path(__file__).resolve().parents[2]
+    workloads,intents,cases=load_restart_suite(root)
+    for case in cases:
+        row=asyncio.run(run_trial(root=root,workloads=workloads,intent=intents[case.base_task_id],case=case,condition="opsguard"))
+        assert row["error"] is None
+        assert not row["forbidden_seen"], case.case_id

@@ -87,7 +87,7 @@ def test_recreate_restart_predicts_direct_outage_and_uncertain_downstream_effect
     assert result.uncertain_services == (frontend,)
 
 
-def test_image_change_requires_runtime_verification_and_no_op_has_no_impact():
+def test_rolling_image_change_keeps_capacity_and_no_op_has_no_impact():
     before = _deployment("api")
     preview = deepcopy(before)
     preview["spec"]["template"]["spec"]["containers"][0]["image"] = "fixture:v2"
@@ -96,9 +96,60 @@ def test_image_change_requires_runtime_verification_and_no_op_has_no_impact():
     changed = _estimate("set_image", before, preview, [before], services)
     unchanged = _estimate("set_image", before, before, [before], services)
 
-    assert changed.reachable_services == changed.uncertain_services == (ResourceRef("service", "shop", "api"),)
-    assert changed.degraded_services == ()
+    # Default 25% budgets on one replica: maxUnavailable rounds to 0, maxSurge to 1.
+    assert changed.reachable_services == (ResourceRef("service", "shop", "api"),)
+    assert changed.degraded_services == changed.uncertain_services == ()
     assert unchanged.reachable_services == unchanged.degraded_services == unchanged.uncertain_services == ()
+
+
+def _restarted(deployment):
+    preview = deepcopy(deployment)
+    preview["spec"]["template"]["metadata"]["annotations"] = {
+        "kubectl.kubernetes.io/restartedAt": "2026-11-25T10:00:00Z",
+    }
+    return preview
+
+
+def test_rolling_restart_of_three_replicas_predicts_no_outage():
+    before = _deployment("api", replicas=3)
+    result = _estimate("restart", before, _restarted(before), [before], [_service("api", {"app": "api"})])
+
+    assert result.reachable_services == (ResourceRef("service", "shop", "api"),)
+    assert result.degraded_services == result.uncertain_services == ()
+
+
+def test_rolling_restart_that_may_remove_every_replica_predicts_outage():
+    before = _deployment("api", replicas=1)
+    before["spec"]["strategy"]["rollingUpdate"] = {"maxUnavailable": 1, "maxSurge": 0}
+    api, frontend = ResourceRef("service", "shop", "api"), ResourceRef("service", "shop", "frontend")
+    services = [_service("api", {"app": "api"}), _service("frontend", {"app": "frontend"})]
+
+    result = _estimate("restart", before, _restarted(before), [before], services, trusted_edges=[(api, frontend)])
+
+    assert result.degraded_services == (api,)
+    assert result.uncertain_services == (frontend,)
+
+
+@pytest.mark.parametrize("rolling", [
+    {"maxUnavailable": 0, "maxSurge": 0},
+    {"maxUnavailable": "half"},
+    {"maxSurge": -1},
+])
+def test_rollout_settings_the_controller_would_reject_stay_uncertain(rolling):
+    before = _deployment("api", replicas=3)
+    before["spec"]["strategy"]["rollingUpdate"] = rolling
+    result = _estimate("restart", before, _restarted(before), [before], [_service("api", {"app": "api"})])
+
+    assert result.uncertain_services == (ResourceRef("service", "shop", "api"),)
+
+
+def test_percentage_budgets_round_like_the_deployment_controller():
+    before = _deployment("api", replicas=4)
+    before["spec"]["strategy"]["rollingUpdate"] = {"maxUnavailable": "50%", "maxSurge": "0%"}
+    result = _estimate("restart", before, _restarted(before), [before], [_service("api", {"app": "api"})])
+
+    # 4 replicas with 50% unavailable keeps 2 serving.
+    assert result.degraded_services == result.uncertain_services == ()
 
 
 @pytest.mark.parametrize(("selector", "degraded"), [({"app": "other"}, False), ({"app": "missing"}, True)])

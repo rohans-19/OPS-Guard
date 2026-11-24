@@ -190,6 +190,39 @@ def _config_effects(
     return degraded, uncertain
 
 
+def _rollout_budget(value: object, replicas: int, *, round_up: bool) -> Optional[int]:
+    """Resolve a RollingUpdate maxUnavailable or maxSurge value the way the Deployment controller does."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if value >= 0 else None
+    if isinstance(value, str) and value.endswith("%") and value[:-1].isdigit():
+        percent = int(value[:-1])
+        scaled = replicas * percent
+        return -(-scaled // 100) if round_up else scaled // 100
+    return None
+
+
+def _rollout_min_available(deployment: Object) -> Optional[int]:
+    """Lowest number of available replicas a RollingUpdate keeps, or None when it cannot be predicted.
+
+    Kubernetes defaults both maxUnavailable and maxSurge to 25%, rounding
+    maxUnavailable down and maxSurge up. A rolling update never takes more than
+    maxUnavailable old Pods out of service before replacements are ready, so a
+    failing new template stalls the rollout instead of removing capacity.
+    """
+    strategy = _field(_field(deployment, "spec"), "strategy")
+    if strategy.get("type", "RollingUpdate") != "RollingUpdate":
+        return None
+    replicas = _replicas(deployment)
+    rolling = _field(strategy, "rollingUpdate")
+    unavailable = _rollout_budget(rolling.get("maxUnavailable", "25%"), replicas, round_up=False)
+    surge = _rollout_budget(rolling.get("maxSurge", "25%"), replicas, round_up=True)
+    if unavailable is None or surge is None or (unavailable == 0 and surge == 0):
+        return None
+    return max(replicas - unavailable, 0)
+
+
 def _active_managed_backends(services: Inventory, backends: Backends, replicas: Mapping[ResourceRef, int]) -> Backends:
     # Selectorless Services can use manually managed endpoints.
     return {
@@ -299,12 +332,19 @@ def predict_impact(
             risky = old_backends[target] != new_backends[target] or not (_selector(before) and _selector(preview))
         else:
             changed = _template(before) != _template(preview) or old_replicas[target] != new_replicas[target]
-            risky = True  # Image and restart rollouts depend on runtime readiness.
+            # A rolling update keeps at least min_available old Pods serving until
+            # replacements are ready. Other strategies, or settings the controller
+            # would reject, leave the outcome to runtime readiness.
+            min_available = _rollout_min_available(preview)
+            risky = min_available is None or old_replicas[target] != new_replicas[target]
         if not changed:
             return ImpactEstimate((), (), (), len(service_index))
 
         strategy = _field(_field(preview, "spec"), "strategy")
-        recreate = verb in ("restart", "set_image") and strategy.get("type") == "Recreate"
+        recreate = verb in ("restart", "set_image") and (
+            strategy.get("type") == "Recreate"
+            or (_rollout_min_available(preview) == 0 and new_replicas[target] > 0)
+        )
         degraded = _services_losing_backends(
             reachable,
             _active_managed_backends(old_services, old_backends, old_replicas),
