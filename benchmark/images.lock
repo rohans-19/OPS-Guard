@@ -1,0 +1,8 @@
+# Fixture and lab images pinned by digest for the v1.0-reference run.
+# Format: <tag as used in manifests and scripts>  <digest recorded from the local Docker cache>
+# Refresh with: docker image inspect --format '{{index .RepoDigests 0}}' <tag>
+python:3.13-slim          python@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90
+prom/alertmanager:v0.28.1 prom/alertmanager@sha256:27c475db5fb156cab31d5c18a4251ac7ed567746a2483ff264516437a39b15ba
+# python:3.12-alpine is used by the scale and ConfigMap fixtures (src/opsguard/benchmark/run_scale.py,
+# benchmark/fixtures/vikas/fixture.yaml, demo/fixture/Dockerfile) but is not in the local cache yet.
+# Pull it once and add its digest here before the Stage 3 benchmark build.
