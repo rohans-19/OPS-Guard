@@ -70,6 +70,9 @@ jobs:
       - run: python -m opsguard.bench.validate --replay
       - run: python -m opsguard.bench.run --output results/ci-memory --repeats 1
       - run: python -m opsguard.bench.report results/ci-memory --output results/ci-memory-report
+      # Stage 1 pilot decisions: permission-only conditions allow the three
+      # authorized-but-harmful actions; OpsGuard escalates them.
+      - run: python -m opsguard.bench.pilot --backend memory --output results/ci-pilot
       - uses: actions/upload-artifact@v4
         if: always()
         with:
