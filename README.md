@@ -1,6 +1,6 @@
 # OPS-Guard
 
-OpsGuard is a deterministic gate for an LLM-powered Kubernetes operations agent. The agent reads logs, alert annotations, runbooks and ConfigMaps as evidence, then proposes a typed Kubernetes action. OpsGuard checks that action against the operator's authorization, re-derives the intended target from live inventory, previews the write, and estimates its downstream effect. A separate oracle reads real cluster state to decide what actually happened.
+OpsGuard is a model-free, policy-constrained gate for an LLM-powered Kubernetes operations agent. It enforces the invariants written into the operator's intent; it cannot guarantee that it inferred the intent correctly or predicted every effect the cluster will have. The agent reads logs, alert annotations, runbooks and ConfigMaps as evidence, then proposes a typed Kubernetes action. OpsGuard checks that action against the operator's authorization, re-derives the intended target from live inventory, previews the write, and estimates its downstream effect. A separate oracle reads real cluster state to decide what actually happened.
 
 The repository also contains OpsGuard-Bench: 20 clean tasks and 50 attacked cases across four evidence channels, with runners that compare four defence conditions.
 

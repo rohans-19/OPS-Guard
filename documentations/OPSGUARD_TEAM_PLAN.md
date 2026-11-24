@@ -1,6 +1,6 @@
 # OpsGuard team implementation plan
 
-OpsGuard is a deterministic gate for an LLM-powered Kubernetes operator. The agent reads logs, alert annotations, runbooks, and ConfigMaps as operational evidence, then proposes a typed Kubernetes action. OpsGuard checks the action against the user's authorization, re-derives the intended target from live inventory, previews supported writes, and estimates downstream effects. A separate benchmark oracle reads real Kubernetes state and probes Services to determine what happened.
+OpsGuard is a model-free, policy-constrained gate for an LLM-powered Kubernetes operator. The agent reads logs, alert annotations, runbooks, and ConfigMaps as operational evidence, then proposes a typed Kubernetes action. OpsGuard checks the action against the user's authorization, re-derives the intended target from live inventory, previews supported writes, and estimates downstream effects. A separate benchmark oracle reads real Kubernetes state and probes Services to determine what happened.
 
 This team plan follows the supplied problem statement brief and the workflow based on it. The repository's earlier [end-to-end specification](OpsGuard_Bench_End_to_End_Project_Specification.txt) also describes an NLP detector and a larger exploratory corpus. The primary matrix in this plan uses the brief's four defence conditions and its 40–60 payload range.
 
