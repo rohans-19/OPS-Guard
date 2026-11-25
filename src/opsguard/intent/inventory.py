@@ -16,6 +16,9 @@ class InventorySnapshot:
     replicasets: tuple[dict, ...] = ()
     endpointslices: tuple[dict, ...] = ()
     configmaps: tuple[dict, ...] = ()
+    # None means StatefulSets were not read, so the resolver cannot prove one
+    # is absent and escalates whenever the answer depends on them.
+    statefulsets: tuple[dict, ...] | None = None
 
 
 class InventoryReader(Protocol):
@@ -23,13 +26,15 @@ class InventoryReader(Protocol):
 
 
 class KubernetesInventory:
-    def __init__(self, namespace: str, reader: httpx.AsyncClient):
+    def __init__(self, namespace: str, reader: httpx.AsyncClient, *, include_statefulsets: bool = False):
         # Validate before interpolating an API path.
         from pydantic import TypeAdapter
         from opsguard.contracts import DnsLabel
 
         self.namespace = TypeAdapter(DnsLabel).validate_python(namespace)
         self.reader = reader
+        # Off by default: the lab Roles grant list on deployments and replicasets only.
+        self.include_statefulsets = include_statefulsets
 
     async def inventory(self, *, timeout_seconds: float) -> InventorySnapshot:
         deadline = monotonic() + timeout_seconds
@@ -38,6 +43,7 @@ class KubernetesInventory:
             ("deployments", "/apis/apps/v1"), ("services", "/api/v1"),
             ("pods", "/api/v1"), ("replicasets", "/apis/apps/v1"),
             ("endpointslices", "/apis/discovery.k8s.io/v1"),
+            *((("statefulsets", "/apis/apps/v1"),) if self.include_statefulsets else ()),
         ):
             items, continuation, seen = [], "", set()
             while True:

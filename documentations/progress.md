@@ -5,10 +5,42 @@ This file tracks progress against the five-stage implementation guide. Update it
 | Stage | Status | Gate |
 | --- | --- | --- |
 | 1 Freeze, formalize and pilot | Implemented locally on branch `stage-1`; not pushed | G0: 4 of 6 items met; mentor sign-off and GitHub CI run outstanding |
-| 2 Design the intent and the gate | Not started | G1 |
+| 2 Design the intent and the gate | In progress: S2-P2 implemented locally on `feat/s2-p2-intent` | G1 |
 | 3 Effect model and Benchmark v2 | Not started | G2 |
 | 4 Baselines, tuning and pre-registration | Not started | G3 |
 | 5 Evaluate, analyse and release | Not started | G4, G5 |
+
+## Stage 2: Design the intent and the gate
+
+### S2-P2 IntentSpec v2, resolver, provenance
+
+**Date:** 25 November 2026. **Branch:** `feat/s2-p2-intent`, from `main` at `44c71e6`. Not pushed.
+
+| Item | Result |
+| --- | --- |
+| `IntentSpecV2` (`intent/models.py`) | Strict model with id, version, task id, issue and expiry times, namespace, target hint (Service, Deployment, StatefulSet, ConfigMap or bare name), verbs, argument bounds, protected resources, postconditions, impact envelope, risk class, approval mode, summary and `drafted_fields`. Rejects verbs without bounds, bounds without verbs, a protected target, a wildcard over its own namespace, and lifetimes over 24 hours. `to_task_intent()` gives the v1 view, so existing code runs unchanged |
+| Signing | Canonical JSON (sorted keys, no signature field), HMAC-SHA256 with `OPSGUARD_INTENT_KEY` from the environment or the ignored `.env` (at least 32 bytes). `verify_intent()` returns `VALID`, `INTENT_INVALID` (altered, wrong key, unsigned, issued in the future, malformed) or `INTENT_EXPIRED` |
+| Gateway | Accepts a signed `IntentSpecV2` plus the key and verifies it on every proposal; failure is BLOCK with `INTENT_INVALID` or `INTENT_EXPIRED` and nothing is sent to the API. A malformed intent or a missing key refuses to construct the gateway |
+| Resolver (`intent/resolver.py`) | `resolve()` follows the guide's pseudocode, with `TARGET_MISSING`, `TARGET_AMBIGUOUS` and `TARGET_REPLACED`. StatefulSets are supported; Pods are followed to their controller root and never bound. `check_binding()` compares the bound object with a fresh read; the gateway blocks a new UID and re-resolves a new resourceVersion once, then escalates with `TARGET_VERSION_CHANGED` |
+| Provenance (`intent/provenance.py`) | Every sensitive argument (namespace, name, replicas, image, ConfigMap key and value, selector) is classed as intent, gateway-read, untrusted or unobserved. A value found in this task's evidence that is neither approved nor read by the gateway for its own target gives `BLOCK(UNTRUSTED_ARGUMENT)` |
+| Scope card (`intent/scope.py`, `demo-ui/src/ScopeCard.tsx`) | A rule-based drafter reads only the request text and the demo's object names and marks what it filled (`drafted_fields`). The operator edits and confirms; `POST /api/scopes` validates the scope and refuses anything the lab cannot enforce (unknown target, replicas outside 1–5, wider image, config or selector bounds, payments unprotected). At run start the server signs it into an `IntentSpecV2` for the run's namespace, and the gateway verifies it on every proposal. The key is `OPSGUARD_INTENT_KEY` from `.env`, or a per-process lab key. The UI requires a confirmed scope before a run; any edit clears the confirmation |
+| Tests | 62 new Python tests in `tests/intent/` (resolver 18, intent spec 18, provenance and gateway 18, scope card 8); 2 opt-in kind tests in `tests/integration/test_kind_resolver.py`; 2 UI tests in `demo-ui/src/scope.test.ts`. Full suite 411 passed, 7 skipped; UI type check, tests and build pass. Draft, confirm, edit-after-confirm and a refused out-of-range edit were checked in the browser |
+| kind run | `opsguard-lab` (new kind cluster, `opsguard-demo:v1/v2` loaded, local Alertmanager on 9093). All 5 opt-in integration tests passed: resolver situations, recreated Deployment, shared executor, selector smoke and admission-policy smoke. The run found a real bug: the API sends `"endpoints": null` for an empty EndpointSlice, which made the resolver escalate `INVENTORY_UNVERIFIED` for a Service with no Pods. Fixed, with a unit test. The tests need `kind.exe` on PATH (the local binary has no `.exe` suffix) |
+| Parity | Scripted memory selector matrix (56 trials) and pilot (30 rows) before and after: no outcome changed. 10 attacked selector trials are still blocked, now with `UNTRUSTED_ARGUMENT` instead of `SELECTOR_NOT_AUTHORIZED` |
+
+**Deliberate choices to review**
+
+- *Gateway-read values* are the resolved target's own fields, not the whole namespace. Otherwise any decoy name in a log would be "read from cluster state" and provenance would never fire on target names.
+- *Selector fallback.* When no Pod matches the selector, the resolver also matches workload Pod templates, so a workload scaled to 0 still resolves. v2 intents always allow the fallback; v1 intents keep the old opt-in.
+- *Bare names* put Services in the candidate set, as the pseudocode says, so a Service and Deployment that share a name escalate.
+- *StatefulSet reads* are off by default (`include_statefulsets=False`) because the lab Roles only grant Deployments and ReplicaSets. Unread StatefulSets give `INVENTORY_INCOMPLETE` whenever the answer depends on them. Writes to StatefulSets are not supported yet (`TARGET_KIND_UNSUPPORTED`).
+- *Limitation for the paper:* taint is found by matching values, not by full information-flow tracking as in CaMeL.
+
+**Open**
+
+1. A full live demo run with a signed scope (needs Docker, kind and a Groq key).
+2. Lab Roles in `bench/kind_lab.py`, `benchmark/kind_scale_lab.py` and `kube/lab.py` need `statefulsets: list` before live runs can turn on StatefulSet reads.
+3. Hand the schema to the Executor owner (S2-P3) and the `envelope` fields to the Impact owner (S2-P4).
 
 ## Stage 1: Freeze, formalize and pilot
 

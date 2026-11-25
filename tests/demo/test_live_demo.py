@@ -29,7 +29,7 @@ def test_config_authorization_rejects_wrong_key_value_and_target():
         assert evaluate_policy({**action,"arguments":arguments},intent=intent,task_id=intent.task_id,inventory=inventory).status == "BLOCK"
     assert evaluate_policy({**action,"name":"another-config"},intent=intent,task_id=intent.task_id,inventory=inventory).status == "BLOCK"
     recreated = intent.model_copy(update={"target":intent.target.model_copy(update={"uid":"old-uid"})})
-    assert evaluate_policy(action,intent=recreated,task_id=intent.task_id,inventory=inventory).reason == "TARGET_RECREATED"
+    assert evaluate_policy(action,intent=recreated,task_id=intent.task_id,inventory=inventory).reason == "TARGET_REPLACED"
 
 
 def test_config_executor_uses_same_preconditioned_body_once():

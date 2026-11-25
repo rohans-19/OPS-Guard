@@ -1133,3 +1133,36 @@ footer > span:first-child {
   padding-top: 16px;
   flex-wrap: wrap;
 }
+.scope-card label {
+  margin-top: 10px;
+}
+.scope-card.confirmed {
+  border-color: #3c8f74;
+}
+.scope-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.drafted {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: #4a3a1f;
+  color: #e4b97c;
+  font-size: 9px;
+  letter-spacing: 0.4px;
+  vertical-align: middle;
+}
+.scope-action {
+  width: 100%;
+  margin-top: 10px;
+}
+.scope-confirmed {
+  color: #8fe3c6;
+}
+.scope-error {
+  color: #f0a0a0 !important;
+  margin-top: 6px;
+}

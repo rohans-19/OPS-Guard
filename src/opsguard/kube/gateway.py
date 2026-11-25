@@ -12,9 +12,13 @@ from opsguard.agent.interfaces import GatewayResult
 from opsguard.contracts import (AlertsRead, ConfigMapRead, DeploymentRead, PodLogsRead, RunbookRead, ServiceRead,
                                 SupportedAction, WireModel)
 from opsguard.intent.evidence import EvidenceRegistry
+from opsguard.intent.models import IntentSpecV2, verify_intent
 from opsguard.intent.policy import evaluate_policy
-from opsguard.intent.resolver import resolve_diagnostic_target
+from opsguard.intent.resolver import check_binding, resolve_diagnostic_target
 from opsguard.kube.executor import MutationExecutor
+
+
+_RETRY = object()  # Internal: re-run the whole decision once with fresh state.
 
 
 class GuardDecision(WireModel):
@@ -31,7 +35,18 @@ class ExecutionGateway:
     """
 
     def __init__(self, inventory, executor: MutationExecutor, *, intent, enforce_task_policy=True,
-                 alerts=None, runbooks=None, kubernetes_evidence=None, impact_decider=None, on_event=None):
+                 alerts=None, runbooks=None, kubernetes_evidence=None, impact_decider=None, on_event=None,
+                 intent_key: bytes | None = None, clock=None):
+        # A signed IntentSpecV2 is verified on every proposal; a v1 TaskIntent is trusted as configured.
+        self.signed_intent = intent if isinstance(intent, IntentSpecV2) else None
+        if self.signed_intent is not None:
+            if intent_key is None:
+                raise ValueError("a signed intent needs the lab intent key")
+            try:
+                intent = self.signed_intent.to_task_intent()
+            except (AttributeError, TypeError, ValueError) as error:
+                raise ValueError("the signed intent is malformed") from error
+        self.intent_key, self.clock = intent_key, clock
         if intent.namespace != executor.bounds.namespace:
             raise ValueError("intent and executor namespaces differ")
         self.inventory_reader, self.executor, self.intent = inventory, executor, intent
@@ -101,8 +116,15 @@ class ExecutionGateway:
             return GatewayResult(status="BLOCK", reason="UNSUPPORTED_OR_INVALID_ACTION")
         async def locked():
             async with self._lock:
-                return await self._propose(request, task_id=task_id, timeout_seconds=timeout_seconds,
-                                           observation_ids=observation_ids)
+                deadline = monotonic() + timeout_seconds
+                # A changed resourceVersion is re-resolved and re-authorized once, then escalated.
+                for attempt in range(2):
+                    outcome = await self._propose(request, task_id=task_id,
+                                                  timeout_seconds=max(0, deadline - monotonic()),
+                                                  observation_ids=observation_ids, final_attempt=attempt == 1)
+                    if outcome is not _RETRY:
+                        return outcome
+                raise AssertionError("unreachable")
         try:
             return await asyncio.wait_for(locked(), timeout_seconds)
         except (TimeoutError, httpx.TimeoutException):
@@ -115,7 +137,20 @@ class ExecutionGateway:
             return GatewayResult(status="ERROR", reason="GATEWAY_VALIDATION_OR_READ_ERROR",
                                  data={"write_outcome_unknown": self.executor.write_outcome_unknown})
 
-    async def _propose(self, request, *, task_id, timeout_seconds, observation_ids):
+    def _intent_check(self):
+        if self.signed_intent is None:
+            return None
+        now = self.clock() if self.clock else None
+        return verify_intent(self.signed_intent, self.intent_key, now=now)
+
+    def _binding_outcome(self, result, prepared_target, latest_target, *, final_attempt):
+        """BLOCK a replaced target; retry a changed version once, then ESCALATE."""
+        state = check_binding(prepared_target, latest_target)
+        if state == "TARGET_VERSION_CHANGED":
+            return result("ESCALATE", "TARGET_VERSION_CHANGED", requires_reevaluation=True) if final_attempt else _RETRY
+        return result("BLOCK", state if state != "BOUND" else "STALE_TARGET", requires_reevaluation=True)
+
+    async def _propose(self, request, *, task_id, timeout_seconds, observation_ids, final_attempt=True):
         started = monotonic()
         decision_id = uuid4().hex
         deadline = started + timeout_seconds
@@ -127,6 +162,12 @@ class ExecutionGateway:
             data["gateway_ms"] = round((monotonic() - started)*1000, 3)
             self.on_event({"event":"decision_result", "decision_id":decision_id, "status":status, "reason":reason, **data})
             return GatewayResult(status=status, reason=reason, decision_id=decision_id, data=data)
+        verification = self._intent_check()
+        if verification is not None:
+            self.on_event({"event": "intent_verification", "decision_id": decision_id,
+                           "intent_id": self.signed_intent.id, **verification.model_dump()})
+            if verification.status != "VALID":
+                return result("BLOCK", verification.status, intent_reason=verification.reason)
         if self.executor.write_outcome_unknown:
             return result("ERROR", "RECONCILIATION_REQUIRED", write_outcome_unknown=True)
         if task_id != self.intent.task_id or request.namespace != self.intent.namespace:
@@ -154,7 +195,7 @@ class ExecutionGateway:
             return result("BLOCK", "UNSUPPORTED_INVALID_OR_OUTSIDE_LAB")
         if policy and policy.resolution.target != prepared.target:
             self.executor.discard(prepared)
-            return result("BLOCK", "STALE_TARGET", requires_reevaluation=True)
+            return self._binding_outcome(result, prepared.target, policy.resolution.target, final_attempt=final_attempt)
         if request.verb == "restart" and (prepared.target.name, prepared.target.uid) in self._restarted:
             self.executor.discard(prepared)
             return result("ALLOW", "ALREADY_RESTARTED_FOR_TASK")
@@ -179,7 +220,8 @@ class ExecutionGateway:
                 if latest.status != "PASS":
                     return result(latest.status, latest.reason, requires_reevaluation=True)
                 if latest.resolution.target != prepared.target:
-                    return result("BLOCK", "STALE_TARGET", requires_reevaluation=True)
+                    return self._binding_outcome(result, prepared.target, latest.resolution.target,
+                                                 final_attempt=final_attempt)
             decision = GuardDecision(status="ALLOW", reason="TASK_POLICY_PASSED" if self.enforce_task_policy else "LAB_BASELINE")
             if self.impact_decider:
                 decision = await asyncio.wait_for(self.impact_decider(request, before, current, preview.object), remaining())

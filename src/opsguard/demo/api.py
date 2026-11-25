@@ -8,11 +8,22 @@ from shutil import which
 from tempfile import TemporaryDirectory
 
 from fastapi import FastAPI, HTTPException, Request
+from pydantic import BaseModel, ConfigDict, Field
+from typing import Literal
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from opsguard.agent.groq_model import groq_key
-from opsguard.demo.runtime import LiveRun, RunRequest
+from opsguard.demo.runtime import DEMO_OBJECTS, LiveRun, RunRequest, check_demo_scope, demo_draft
+from opsguard.intent.models import load_intent_key
+from opsguard.intent.scope import ConfirmedScope
+
+
+class DraftRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    operation: Literal["scale", "restart", "set_image", "set_config", "set_selector"] = "scale"
+    replicas: int = Field(default=3, ge=1, le=5, strict=True)
+    prompt: str = Field(min_length=1, max_length=2000)
 
 
 async def command_check(args):
@@ -47,7 +58,12 @@ async def kind_node_check(cluster):
 def create_app(root: Path | None = None, cluster="opsguard", alert_port=9093):
     root = (root or Path.cwd()).resolve()
     token = secrets.token_urlsafe(32)
-    runs, submissions = {}, {}
+    runs, submissions, scopes = {}, {}, {}
+    try:
+        intent_key, key_source = load_intent_key(root / ".env"), "configured"
+    except ValueError:
+        # Lab only: a per-process key, so intents from an earlier server never verify.
+        intent_key, key_source = secrets.token_bytes(32), "ephemeral"
 
     @asynccontextmanager
     async def lifespan(app):
@@ -106,7 +122,33 @@ def create_app(root: Path | None = None, cluster="opsguard", alert_port=9093):
                 checks["alertmanager"] = {"ok":response.is_success,"detail":f"Local Alertmanager on port {alert_port}"}
         except Exception:
             checks["alertmanager"] = {"ok":False,"detail":"Required only for alert evidence; start local Alertmanager"}
+        checks["intent_key"] = {"ok":True,"detail":"OPSGUARD_INTENT_KEY from .env" if key_source == "configured"
+                                else "Ephemeral lab key for this server process"}
         return {"cluster":cluster,"checks":checks,"ready":all(v["ok"] for k,v in checks.items() if k != "alertmanager")}
+
+    @app.post("/api/scopes/draft")
+    async def draft(body: DraftRequest):
+        """A drafted scope from the request text and object names only. Nothing is stored."""
+        try:
+            scope = demo_draft(body.operation, body.replicas, body.prompt)
+        except ValueError as error:
+            raise HTTPException(422, str(error))
+        return {"scope":scope.model_dump(mode="json"),"objects":[o.model_dump() for o in DEMO_OBJECTS]}
+
+    @app.post("/api/scopes",status_code=201)
+    async def confirm(request: Request):
+        """The operator's confirmed scope. It is signed into an intent when a run starts."""
+        try:
+            # JSON mode: the strict models accept arrays as tuples but no unknown fields.
+            body = ConfirmedScope.model_validate_json(await request.body())
+            check_demo_scope(body)
+        except ValueError as error:
+            raise HTTPException(422, str(error)[:1000])
+        if len(scopes) >= 100:
+            raise HTTPException(409,"Restart the demo server after 100 confirmed scopes")
+        scope_id = "scope-" + secrets.token_hex(6)
+        scopes[scope_id] = body
+        return {"scope_id":scope_id,"scope":body.model_dump(mode="json")}
 
     def get_run(run_id):
         if run_id not in runs:
@@ -131,7 +173,14 @@ def create_app(root: Path | None = None, cluster="opsguard", alert_port=9093):
             groq_key(root/".env")
         except ValueError:
             raise HTTPException(503,"Configure GROQ_API_KEY in the ignored root .env before running")
-        run = LiveRun(body,root,cluster,alert_port)
+        scope = None
+        if body.scope_id is not None:
+            scope = scopes.get(body.scope_id)
+            if scope is None:
+                raise HTTPException(404,"Unknown scope; confirm the scope card again")
+            if scope.operation != body.operation:
+                raise HTTPException(409,"The confirmed scope is for a different operation")
+        run = LiveRun(body,root,cluster,alert_port,scope=scope,intent_key=intent_key if scope else None)
         runs[run.id] = run
         submissions[key] = run.id
         run.task = asyncio.create_task(run.run())

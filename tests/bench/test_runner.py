@@ -77,7 +77,7 @@ def test_smoke_run_unprotected_reaches_the_forbidden_state_and_guarded_does_not(
     # The scripted agent repairs the route afterwards, so this forbidden state was transient.
     assert baseline["forbidden_seen"] is True and baseline["safe_completion"] is False
     assert guarded["forbidden_seen"] is False and guarded["safe_completion"] is True
-    assert [d["reason"] for d in guarded["decisions"]] == ["SELECTOR_NOT_AUTHORIZED", "WRITE_ACCEPTED"]
+    assert [d["reason"] for d in guarded["decisions"]] == ["UNTRUSTED_ARGUMENT", "WRITE_ACCEPTED"]
     assert guarded_trace["impact_audit"][-1]["selector_backend_verified"] is True
     # Outcomes come from the oracle's state, not from the transcript of attempts.
     attempted = [e["request"]["arguments"] for e in guarded_trace["agent"] if e.get("event") == "request" and e["kind"] == "action"]

@@ -25,6 +25,7 @@ import {
   statusOf,
   resolverPath,
 } from "./events";
+import ScopeCard from "./ScopeCard";
 
 const operations: Record<string, string> = {
   scale: "Scale Deployment",
@@ -77,6 +78,7 @@ export default function App() {
   const [model, setModel] = useState("openai/gpt-oss-120b");
   const [guard, setGuard] = useState("opsguard");
   const [runId, setRunId] = useState<string | null>(null);
+  const [scopeId, setScopeId] = useState<string | null>(null);
   const [events, setEvents] = useState<Event[]>([]);
   const [selected, setSelected] = useState<number | null>(null);
   const [tab, setTab] = useState("explain");
@@ -167,6 +169,7 @@ export default function App() {
         payload: injection ? payload : "",
         model,
         guard,
+        scope_id: scopeId,
       });
       setEvents([]);
       setSelected(null);
@@ -349,25 +352,14 @@ export default function App() {
                 />
               </label>
             )}
-            <div className="authorization">
-              <span>
-                <Shield size={14} /> CONFIRMED SCOPE
-              </span>
-              <strong>
-                {operation === "set_config" ? "app-settings" : "checkout"}{" "}
-                <ArrowRight size={13} />{" "}
-                {operation === "scale"
-                  ? `exactly ${replicas} replicas`
-                  : operation === "set_image"
-                    ? "app → opsguard-demo:v2"
-                    : operation === "set_config"
-                      ? "mode → enabled"
-                      : operation === "set_selector"
-                        ? "checkout-api backend"
-                        : "one restart"}
-              </strong>
-              <small>Payments stays protected. Run freezes these fields.</small>
-            </div>
+            <ScopeCard
+              operation={operation}
+              replicas={replicas}
+              prompt={prompt}
+              locked={!!runId}
+              mutate={mutate}
+              onConfirmed={setScopeId}
+            />
             <label>
               Groq model
               <input
@@ -462,11 +454,12 @@ export default function App() {
                     channel === "alerts" &&
                     !readiness?.checks?.alertmanager?.ok) ||
                   !prompt.trim() ||
+                  !scopeId ||
                   (injection && !payload.trim())
                 }
               >
                 <Play size={16} />
-                {busy ? "Starting…" : "Review scope & run live"}
+                {busy ? "Starting…" : scopeId ? "Run live with signed scope" : "Confirm the scope to run"}
               </button>
             ) : (
               <div className="run-controls">

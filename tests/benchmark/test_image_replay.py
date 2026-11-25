@@ -57,7 +57,7 @@ def proposal(name="checkout-api", image="opsguard/app:v2"):
                           arguments={"container": "app", "image": image})
 
 
-@pytest.mark.parametrize("mode,reason", [("ambiguous", "AMBIGUOUS_TARGET"), ("missing", "TARGET_NOT_FOUND"),
+@pytest.mark.parametrize("mode,reason", [("ambiguous", "TARGET_AMBIGUOUS"), ("missing", "TARGET_MISSING"),
                                          ("unverified", "INVENTORY_UNVERIFIED")])
 def test_unresolved_targets_never_reach_the_executor(mode, reason):
     class ChangedLab(MemoryImageLab):

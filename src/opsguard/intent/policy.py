@@ -1,4 +1,4 @@
-"""Deterministic authorization. A PASS still requires preview and effect checks."""
+"""Task-scoped authorization. A PASS still requires preview and effect checks."""
 
 from typing import Literal
 
@@ -8,6 +8,7 @@ from opsguard.contracts import ActionRequest, ScaleAction, SetImageAction, SetSe
 from opsguard.intent.evidence import EvidenceRegistry
 from opsguard.intent.inventory import InventorySnapshot
 from opsguard.intent.models import ConfigPermission, ImagePermission, ScalePermission, SelectorPermission, TaskIntent
+from opsguard.intent.provenance import ProvenanceResult, check_provenance
 from opsguard.intent.resolver import TargetResolution, resolve_service, resolve_target, selector_backends
 
 
@@ -21,6 +22,7 @@ class PolicyResult(WireModel):
     reason: str
     resolution: TargetResolution | None = None
     bindings: tuple[FieldBinding, ...] = ()
+    provenance: ProvenanceResult | None = None
 
 
 def evaluate_policy(
@@ -29,13 +31,15 @@ def evaluate_policy(
     observation_ids: tuple[str, ...] = (),
     on_check=None,
 ) -> PolicyResult:
+    provenance = None
+
     def passed(name):
         if on_check:
             on_check({"check":name, "status":"PASS"})
     def block(reason):
         if on_check:
             on_check({"check":reason, "status":"BLOCK"})
-        return PolicyResult(status="BLOCK", reason=reason)
+        return PolicyResult(status="BLOCK", reason=reason, provenance=provenance)
 
     if task_id != intent.task_id:
         return block("TASK_ID_MISMATCH")
@@ -61,6 +65,15 @@ def evaluate_policy(
     if permission is None:
         return block("OPERATION_NOT_AUTHORIZED")
     passed("OPERATION_AUTHORIZED")
+    if evidence is not None:
+        # Before the bound checks, so a value copied from evidence is reported
+        # as UNTRUSTED_ARGUMENT even when a bound would also reject it.
+        provenance = check_provenance(action, intent=intent, inventory=inventory, evidence=evidence)
+        if on_check:
+            on_check({"check": provenance.reason, "status": provenance.status,
+                      "arguments": [item.model_dump() for item in provenance.arguments]})
+        if provenance.status != "PASS":
+            return PolicyResult(status="BLOCK", reason=provenance.reason, provenance=provenance)
     if isinstance(action, ScaleAction):
         if not isinstance(permission, ScalePermission) or not (
             permission.min_replicas <= action.arguments.replicas <= permission.max_replicas
@@ -79,7 +92,7 @@ def evaluate_policy(
             return block("TASK_SCOPE_MISMATCH")
 
     if isinstance(action, SetSelectorAction):
-        outcome = _selector_policy(action, intent, permission, inventory)
+        outcome = _selector_policy(action, intent, permission, inventory).model_copy(update={"provenance": provenance})
         if on_check:
             on_check({"check":outcome.reason, "status":outcome.status})
         return outcome
@@ -89,17 +102,26 @@ def evaluate_policy(
     if on_check:
         on_check({"check":"TARGET_RESOLUTION", "status":resolution.status, "resolution":resolution.model_dump()})
     if resolution.status != "PASS":
-        return PolicyResult(status=resolution.status, reason=resolution.reason, resolution=resolution)
+        return PolicyResult(status=resolution.status, reason=resolution.reason, resolution=resolution,
+                            provenance=provenance)
+    expected_kind = {"deployment": "Deployment", "configmap": "ConfigMap"}.get(action.resource)
+    if resolution.target_kind != expected_kind:
+        # For example a StatefulSet target: no typed operation writes one yet.
+        if on_check:
+            on_check({"check": "TARGET_KIND_UNSUPPORTED", "status": "BLOCK", "kind": resolution.target_kind})
+        return PolicyResult(status="BLOCK", reason="TARGET_KIND_UNSUPPORTED", resolution=resolution,
+                            provenance=provenance)
     if action.name != resolution.target.name:
         if on_check:
             on_check({"check":"TASK_SCOPE_MISMATCH", "status":"BLOCK", "expected":resolution.target.name, "actual":action.name})
-        return PolicyResult(status="BLOCK", reason="TASK_SCOPE_MISMATCH", resolution=resolution)
+        return PolicyResult(status="BLOCK", reason="TASK_SCOPE_MISMATCH", resolution=resolution,
+                            provenance=provenance)
     passed("TARGET_MATCHES_AUTHORIZATION")
     # Model-provided observation references are diagnostics only. Evidence never
     # becomes an authority, even when its text repeats an authorized value.
     fields = ("task_id", "namespace", "verb", *[f"arguments.{name}" for name in type(action.arguments).model_fields])
     return PolicyResult(
-        status="PASS", reason="TASK_AUTHORIZED", resolution=resolution,
+        status="PASS", reason="TASK_AUTHORIZED", resolution=resolution, provenance=provenance,
         bindings=tuple(FieldBinding(field=field, authority="trusted_task") for field in fields)
         + (FieldBinding(field="name", authority="live_inventory"),),
     )

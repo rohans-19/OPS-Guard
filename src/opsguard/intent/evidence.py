@@ -56,5 +56,9 @@ class EvidenceRegistry:
             raise ValueError("observation IDs cannot be replaced")
         self._records[record.observation_id] = record
 
+    def records(self) -> tuple[EvidenceRecord, ...]:
+        """Every untrusted observation of this task, in arrival order."""
+        return tuple(self._records.values())
+
     def contains(self, task_id: str, observation_ids: tuple[str, ...]) -> bool:
         return task_id == self.task_id and all(ref in self._records for ref in observation_ids)

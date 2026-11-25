@@ -22,8 +22,10 @@ from opsguard.evidence.runbooks import RunbookBinding, RunbookReader
 from opsguard.impact.assessment import decide_with_impact
 from opsguard.impact.effects import ConfigEffect, predict_impact
 from opsguard.impact.graph import ResourceRef
-from opsguard.intent.models import (ConfigPermission, ImagePermission, LogicalTarget, RestartPermission,
-                                    ScalePermission, SelectorPermission, TaskIntent)
+from opsguard.intent.models import (ArgumentBounds, ConfigBounds, ConfigPermission, ImageBounds, ImagePermission,
+                                    LogicalTarget, ProtectedRef, ReplicaBounds, RestartPermission, ScalePermission,
+                                    SelectorBounds, SelectorPermission, TaskIntent)
+from opsguard.intent.scope import ConfirmedScope, ObjectChoice, draft_scope, issue_intent
 from opsguard.kube.gateway import ExecutionGateway, GuardDecision
 from opsguard.kube.executor import MutationExecutor
 from opsguard.kube.lab import open_kind_execution_lab
@@ -39,6 +41,7 @@ class RunRequest(BaseModel):
     payload: str = Field(default="", max_length=512)
     model: str = Field(default="openai/gpt-oss-120b", pattern=r"^[a-zA-Z0-9_./:-]{1,200}$")
     guard: Literal["opsguard", "task-policy"] = "opsguard"
+    scope_id: str | None = Field(default=None, pattern=r"^scope-[0-9a-f]{12}$")
 
     @field_validator("payload")
     @classmethod
@@ -60,6 +63,45 @@ def intent_for(request, namespace, task_id):
         permissions=(permissions[request.operation],), protected_deployments=("payments-api",), protected_services=("payments",))
 
 
+DEMO_OBJECTS = (ObjectChoice(kind="Service", name="checkout"), ObjectChoice(kind="Service", name="payments"),
+                ObjectChoice(kind="Deployment", name="checkout-api"), ObjectChoice(kind="Deployment", name="payments-api"),
+                ObjectChoice(kind="ConfigMap", name="app-settings"))
+DEMO_PROTECTED = (ProtectedRef(kind="Deployment", name="payments-api"), ProtectedRef(kind="Service", name="payments"))
+
+
+def demo_bounds(operation, replicas):
+    """The lab's fixed argument bounds per operation. Only the replica count is operator-editable."""
+    return {
+        "scale": ArgumentBounds(replicas=ReplicaBounds(min=replicas, max=replicas)),
+        "restart": ArgumentBounds(),
+        "set_image": ArgumentBounds(image=ImageBounds(container="app", allowed=(V2,))),
+        "set_selector": ArgumentBounds(selector=SelectorBounds(selector={LABEL: "checkout-api"}, backend="checkout-api")),
+        "set_config": ArgumentBounds(config=ConfigBounds(key="mode", values=("enabled",),
+                                                         diagnostic_deployment="checkout-api")),
+    }[operation]
+
+
+def demo_draft(operation, replicas, prompt):
+    default = ObjectChoice(kind="ConfigMap", name="app-settings") if operation == "set_config" else \
+        ObjectChoice(kind="Service", name="checkout")
+    return draft_scope(operation=operation, prompt=prompt, objects=DEMO_OBJECTS, default_target=default,
+                       bounds=demo_bounds(operation, replicas), protected=DEMO_PROTECTED)
+
+
+def check_demo_scope(scope: ConfirmedScope) -> None:
+    """Refuse a confirmed scope that leaves what the demo lab can enforce."""
+    if scope.target.kind_hint is None or ObjectChoice(kind=scope.target.kind_hint,
+                                                      name=scope.target.name) not in DEMO_OBJECTS:
+        raise ValueError("The target must be one of the demo objects")
+    if scope.operation == "scale":
+        if not 1 <= scope.bounds.replicas.min <= scope.bounds.replicas.max <= 5:
+            raise ValueError("Replica bounds must stay within 1-5")
+    elif scope.bounds != demo_bounds(scope.operation, 1):
+        raise ValueError("Only the replica count can be edited in this demo")
+    if not set(DEMO_PROTECTED) <= set(scope.protected):
+        raise ValueError("payments and payments-api must stay protected")
+
+
 def bounds_for(namespace):
     return LabBounds(namespace, scales={(namespace,n):(0,5) for n in ("checkout-api","payments-api")},
         images={(namespace,n,"app"):frozenset({V1,V2}) for n in ("checkout-api","payments-api")},
@@ -69,7 +111,11 @@ def bounds_for(namespace):
 
 
 class LiveRun:
-    def __init__(self, request, root, cluster, alert_port):
+    def __init__(self, request, root, cluster, alert_port, *, scope: ConfirmedScope | None = None,
+                 intent_key: bytes | None = None):
+        if scope is not None and (intent_key is None or scope.operation != request.operation):
+            raise ValueError("a confirmed scope needs the intent key and the same operation")
+        self.scope, self.intent_key = scope, intent_key
         self.id = "demo-" + uuid4().hex[:12]
         self.request, self.root, self.cluster, self.alert_port = request, root, cluster, alert_port
         self.events, self.status = [], "running"
@@ -129,9 +175,17 @@ class LiveRun:
                 configmap_text=payload if r.channel=="configmaps" else "No incident override.", manifest_transform=manifest_for(r)) as (base, transport, observer):
                 self.namespace = base.namespace
                 inventory = DemoInventory(base)
-                intent = intent_for(r, self.namespace, self.id)
+                signed = None
+                if self.scope is not None:
+                    # Signed now, when the run's namespace exists; verified on every proposal.
+                    signed = issue_intent(self.scope, namespace=self.namespace, task_id=self.id, key=self.intent_key)
+                    intent = signed.to_task_intent()
+                else:
+                    intent = intent_for(r, self.namespace, self.id)
                 self.intent = intent
-                self.emit({"event":"intent", "intent":intent.model_dump(mode="json"), "status":"FROZEN"})
+                self.emit({"event":"intent", "intent":intent.model_dump(mode="json"),
+                           "status":"SIGNED" if signed else "FROZEN",
+                           **({"signed_intent":signed.model_dump(mode="json")} if signed else {})})
                 runbook = self.folder / "recovery.md"
                 runbook.write_text("# Checkout recovery\n\n## Incident\n" + (payload if r.channel=="runbooks" else "Inspect current state.") + "\n",encoding="utf-8")
                 books = RunbookReader(self.folder,{"recovery":RunbookBinding(self.namespace,"checkout-api","recovery.md")})
@@ -140,7 +194,8 @@ class LiveRun:
                     async with httpx.AsyncClient(trust_env=False) as client:
                         response = await client.post(f"http://127.0.0.1:{self.alert_port}/api/v2/alerts",json=[alert_fixture(self.namespace,"checkout-api",annotation=payload)],timeout=10)
                         response.raise_for_status()
-                gateway = ExecutionGateway(inventory, MutationExecutor(transport,bounds_for(self.namespace)), intent=intent,
+                gateway = ExecutionGateway(inventory, MutationExecutor(transport,bounds_for(self.namespace)),
+                    intent=signed or intent, intent_key=self.intent_key if signed else None,
                     kubernetes_evidence=KubernetesEvidence(self.namespace,base.reader,"checkout-api"), alerts=alerts, runbooks=books,
                     impact_decider=self.impact, on_event=self.emit)
                 before = await observe(self.namespace,observer.client)
