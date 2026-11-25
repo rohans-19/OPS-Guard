@@ -11,6 +11,7 @@ from pydantic import TypeAdapter
 from opsguard.agent.interfaces import GatewayResult
 from opsguard.contracts import (AlertsRead, ConfigMapRead, DeploymentRead, PodLogsRead, RunbookRead, ServiceRead,
                                 SupportedAction, WireModel)
+from opsguard.impact.assessment import EpisodeState
 from opsguard.intent.evidence import EvidenceRegistry
 from opsguard.intent.models import IntentSpecV2, verify_intent
 from opsguard.intent.policy import evaluate_policy
@@ -54,6 +55,10 @@ class ExecutionGateway:
         self.alerts, self.runbooks, self.impact_decider = alerts, runbooks, impact_decider
         self.kubernetes_evidence = kubernetes_evidence
         self.evidence = EvidenceRegistry(intent.task_id)
+        # Start snapshot plus every applied change, so a decider can judge the sequence.
+        self.episode = EpisodeState(intent.task_id)
+        if getattr(impact_decider, "uses_episode", False):
+            impact_decider.episode = self.episode
         self.audit: list[dict] = []
         self._lock = asyncio.Lock()
         self._restarted: set[tuple[str, str]] = set()
@@ -175,6 +180,7 @@ class ExecutionGateway:
         if not self.evidence.contains(task_id, observation_ids):
             return result("BLOCK", "UNKNOWN_OBSERVATION")
         before = await self.inventory_reader.inventory(timeout_seconds=remaining())
+        self.episode.begin(before)
         self.on_event({"event":"inventory", "decision_id":decision_id, "snapshot":__import__('dataclasses').asdict(before)})
         policy = None
         if self.enforce_task_policy:
@@ -232,8 +238,10 @@ class ExecutionGateway:
             outcome = await self.executor.execute(prepared, decision=decision.status, timeout_seconds=remaining())
             audit["execution"] = outcome.model_dump()
             self.on_event({"event":"execution", "decision_id":decision_id, **outcome.model_dump()})
-            if outcome.status == "APPLIED" and request.verb == "restart":
-                self._restarted.add((prepared.target.name, prepared.target.uid))
+            if outcome.status == "APPLIED":
+                self.episode.record(request, preview.object)
+                if request.verb == "restart":
+                    self._restarted.add((prepared.target.name, prepared.target.uid))
             return result("ALLOW" if outcome.status == "APPLIED" else outcome.status,
                           outcome.reason if decision.status == "ALLOW" else decision.reason,
                           preview_ms=preview.elapsed_ms if preview.request_sent else None,

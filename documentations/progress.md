@@ -5,12 +5,27 @@ This file tracks progress against the five-stage implementation guide. Update it
 | Stage | Status | Gate |
 | --- | --- | --- |
 | 1 Freeze, formalize and pilot | Implemented locally on branch `stage-1`; not pushed | G0: 4 of 6 items met; mentor sign-off and GitHub CI run outstanding |
-| 2 Design the intent and the gate | In progress: S2-P2 implemented locally on `feat/s2-p2-intent` | G1 |
+| 2 Design the intent and the gate | In progress: S2-P2 on `main` (`dfd30d6`); S2-P4 on `feat/s2-p4-decision`; S2-P1, S2-P3, S2-P5 next | G1 |
 | 3 Effect model and Benchmark v2 | Not started | G2 |
 | 4 Baselines, tuning and pre-registration | Not started | G3 |
 | 5 Evaluate, analyse and release | Not started | G4, G5 |
 
 ## Stage 2: Design the intent and the gate
+
+### S2-P4 Three-step decision and episode state
+
+**Date:** 26 November 2026. **Branch:** `feat/s2-p4-decision`, from `main` at `dfd30d6`.
+
+| Item | Result |
+| --- | --- |
+| Three steps (`impact/assessment.py`) | `hard_rules()` (BLOCK on a failed policy), `envelope_check()` (ESCALATE on a breach or unknown impact), `graded_score()` (weighted score), called in that order by `decide_with_impact`. The stricter result wins; on a tie the graded reason is kept. Its decisions and reason codes are identical to v1.0 plus the S1-P4 rule, checked on 384 input combinations against a copy of the old function |
+| Envelope reason codes | The `EnvelopeDecider` used with a signed intent gives `IMPACT_UNKNOWN`, `ENVELOPE_DEGRADATION`, `ENVELOPE_SERVICES`, `ENVELOPE_NAMESPACES`, `ENVELOPE_IRREVERSIBLE`, `ENVELOPE_DELETION` and `ENVELOPE_CUMULATIVE`, plus the graded codes. Every result is logged with its step |
+| Mapping today's estimate | Services affected = reachable Services; namespaces from those. Scale and selector changes are settled by an exact check (does any Service lose every active backend, by the Pod-template approximation); rollout and ConfigMap uncertainty stays `IMPACT_UNKNOWN`. No typed operation deletes or is irreversible yet, so those sets are empty and Stage 3 fills them |
+| Episode state | `EpisodeState` keeps the start snapshot and every applied change; the gateway creates one per task, begins it on the first proposal, records each applied write, and attaches it to an episode-aware decider. "Alone" is the action on the start snapshot; "cumulative" is the action after all approved changes. A cumulative-only breach is BLOCK(`ENVELOPE_CUMULATIVE`) |
+| Tests | `tests/impact/test_envelope.py`: scale canary 2→0, restart checkout, move the selector to the canary: steps 1–2 ALLOW, step 3 BLOCK with `ENVELOPE_CUMULATIVE`; each step alone ALLOW; per-dimension codes; cumulative Services limit; gateway hook; v1.0 equivalence. Full suite 807 passed, 7 skipped |
+| Parity | In-memory selector matrix (56 trials) and pilot (30 rows) against `main`: 0 outcome and 0 decision differences |
+
+**Note.** The guide's example scales checkout 3→1. Today's estimate marks every scale-down as uncertain, so a canary Deployment stands in for the step that removes capacity; the sequence and the result are the same.
 
 ### S2-P2 IntentSpec v2, resolver, provenance
 
