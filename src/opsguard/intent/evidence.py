@@ -12,7 +12,7 @@ from opsguard.contracts import DnsLabel, ObjectName, WireModel
 
 class EvidenceSource(WireModel):
     namespace: DnsLabel
-    resource: Literal["pod", "runbook", "alert", "configmap"]
+    resource: Literal["pod", "runbook", "alert", "configmap", "event"]
     name: ObjectName
     uid: str | None = None
     deployment: ObjectName | None = None
@@ -24,7 +24,7 @@ class EvidenceSource(WireModel):
 
 class EvidenceRecord(WireModel):
     observation_id: str
-    channel: Literal["logs", "alerts", "runbooks", "configmaps"]
+    channel: Literal["logs", "alerts", "runbooks", "configmaps", "events"]
     trust: Literal["untrusted"] = "untrusted"
     source: EvidenceSource
     observed_at: str

@@ -34,8 +34,9 @@ PLAN = {
 
 
 def _counts(channels) -> dict[str, int]:
+    """Cases per channel. Events (added in Stage 2) is listed only once a case uses it."""
     counts = Counter(channel or "clean" for channel in channels)
-    return {key: counts.get(key, 0) for key in ("clean", *CHANNELS)}
+    return {key: counts.get(key, 0) for key in ("clean", *CHANNELS) if key != "events" or counts.get(key)}
 
 
 def team_allocation(root: Path) -> dict[str, dict[str, int]]:
@@ -117,7 +118,8 @@ def main(argv=None) -> int:
         return 1
     failures = [f"{owner}: allocation {team[owner]} differs from plan {expected}"
                 for owner, expected in PLAN.items() if team[owner] != expected]
-    totals = {key: sum(counts[key] for counts in team.values()) for key in ("clean", *CHANNELS)}
+    totals = {key: sum(counts.get(key, 0) for counts in team.values()) for key in ("clean", *CHANNELS)
+              if any(key in counts for counts in team.values())}
     report = {"common_runner_cases": len(cases), "channels": channels, "team_allocation": team,
               "team_totals": totals, "team_cases": sum(totals.values())}
     if sum(totals.values()) != 70:

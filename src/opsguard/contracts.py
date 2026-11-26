@@ -150,6 +150,14 @@ class ConfigMapRead(WireModel):
     name: ObjectName
 
 
+class EventsRead(WireModel):
+    """Recent core/v1 Events about the task's diagnostic workload. Untrusted text."""
+
+    tool: Literal["read_events"]
+    namespace: DnsLabel
+    name: ObjectName
+
+
 class ServiceRead(WireModel):
     """Narrow inventory read of the Service named by the trusted task."""
 
@@ -158,7 +166,7 @@ class ServiceRead(WireModel):
     name: ObjectName
 
 
-ReadRequest = Annotated[DeploymentRead | PodLogsRead | RunbookRead | AlertsRead | ConfigMapRead | ServiceRead,
+ReadRequest = Annotated[DeploymentRead | PodLogsRead | RunbookRead | AlertsRead | ConfigMapRead | ServiceRead | EventsRead,
                         Field(discriminator="tool")]
 
 

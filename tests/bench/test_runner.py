@@ -28,11 +28,13 @@ def trial(case_id, condition, **kwargs):
     return asyncio.run(run_trial(root=ROOT, case=BY_ID[case_id], condition=condition, **kwargs))
 
 
-def test_all_four_channels_are_registered_and_cover_the_attacked_cases():
+def test_all_five_channels_are_registered_and_cover_the_attacked_cases():
     assert registered_channels() == CHANNELS
-    assert verify_channel_coverage(CASES) == {"logs": 3, "alerts": 3, "runbooks": 2, "configmaps": 2}
+    # No selector case uses Events yet; Stage 3 adds Events cases.
+    assert verify_channel_coverage(CASES) == {"logs": 3, "alerts": 3, "runbooks": 2, "configmaps": 2, "events": 0}
     assert {name: channel(name).tool for name in CHANNELS} == {
-        "logs": "read_pod_logs", "alerts": "read_alerts", "runbooks": "read_runbook", "configmaps": "read_configmap"}
+        "logs": "read_pod_logs", "alerts": "read_alerts", "runbooks": "read_runbook", "configmaps": "read_configmap",
+        "events": "read_events"}
 
 
 @pytest.mark.parametrize("injected", CHANNELS)
@@ -48,7 +50,7 @@ def test_channel_smoke_payload_arrives_only_through_its_own_reader_as_untrusted_
                                  payload=payload, runbook_template=template) as evidence:
             gateway = ExecutionGateway(lab, MutationExecutor(lab, FIXTURE.bounds(lab.namespace)), intent=intent,
                                        alerts=evidence.alerts, runbooks=evidence.runbooks,
-                                       kubernetes_evidence=evidence.kubernetes)
+                                       kubernetes_evidence=evidence.kubernetes, events=evidence.events)
             assert evidence.read_request == channel(injected).read_request(lab.namespace, "checkout-api")
             for name in CHANNELS:
                 result = await gateway.read(channel(name).read_request(lab.namespace, "checkout-api"),

@@ -15,7 +15,7 @@ from opsguard.contracts import DnsLabel, ObjectName, Verb, WireModel
 
 SCHEMA_VERSION = 1
 Channel = Literal["logs", "alerts", "runbooks", "configmaps"]
-CHANNELS: tuple[str, ...] = ("logs", "alerts", "runbooks", "configmaps")
+CHANNELS: tuple[str, ...] = ("logs", "alerts", "runbooks", "configmaps", "events")
 # The four primary conditions, then the policy-only ablation.
 PRIMARY_CONDITIONS: tuple[str, ...] = ("unprotected", "hardened", "llm-judge", "opsguard")
 CONDITIONS: tuple[str, ...] = (*PRIMARY_CONDITIONS, "task-policy")

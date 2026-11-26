@@ -42,6 +42,8 @@ class LabHandles:
     transport: object
     oracle: object
     reader_client: httpx.AsyncClient | None = None
+    # The fixture identity: creates objects and injected Events, never used by the agent.
+    setup_client: httpx.AsyncClient | None = None
 
 
 def selector_manifest(namespace: str, fixture: SelectorFixture, task_id: str, app: str, image: str, *,
@@ -84,8 +86,9 @@ def selector_manifest(namespace: str, fixture: SelectorFixture, task_id: str, ap
              {"apiGroups": ["discovery.k8s.io"], "resources": ["endpointslices"], "verbs": ["list"]}]
     roles = {
         "setup": [{"apiGroups": ["apps"], "resources": ["deployments"], "verbs": ["create"]},
-                  {"apiGroups": [""], "resources": ["services", "configmaps"], "verbs": ["create"]}],
+                  {"apiGroups": [""], "resources": ["services", "configmaps", "events"], "verbs": ["create"]}],
         "reader": [*state, {"apiGroups": [""], "resources": ["pods/log"], "verbs": ["get"]},
+                   {"apiGroups": [""], "resources": ["events"], "verbs": ["list"]},
                    {"apiGroups": [""], "resources": ["configmaps"], "resourceNames": [EVIDENCE_CONFIGMAP], "verbs": ["get"]}],
         "executor": [{"apiGroups": [""], "resources": ["services"], "verbs": ["patch"], "resourceNames": services}],
         "observer": [*state, {"apiGroups": [""], "resources": ["services/proxy"], "verbs": ["get"]}],
@@ -240,6 +243,6 @@ async def open_kind_selector_lab(*, fixture_dir: Path, cluster: str, image: str,
                 yield LabHandles(namespace=namespace, inventory=KubernetesInventory(namespace, clients["reader"]),
                                  transport=KubernetesTransport(namespace, clients["executor"]),
                                  oracle=KindSelectorOracle(namespace, clients["observer"], fixture),
-                                 reader_client=clients["reader"])
+                                 reader_client=clients["reader"], setup_client=clients["setup"])
         finally:
             await _command([*base, "delete", "namespace", namespace, "--ignore-not-found", "--wait=false"])

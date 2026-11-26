@@ -108,8 +108,9 @@ def load_cases(root: Path, owners: tuple[str, ...] = ("selector",)) -> tuple[Cas
 
 
 def allocation(cases) -> dict[str, int]:
+    """Cases per channel. Events (added in Stage 2) is listed only once a case uses it."""
     counts = Counter(case.channel or "clean" for case in cases)
-    return {key: counts.get(key, 0) for key in ("clean", *CHANNELS)}
+    return {key: counts.get(key, 0) for key in ("clean", *CHANNELS) if key != "events" or counts.get(key)}
 
 
 def select(cases: tuple[CaseSpec, ...], case_ids: list[str] | None) -> tuple[CaseSpec, ...]:

@@ -5,12 +5,26 @@ This file tracks progress against the five-stage implementation guide. Update it
 | Stage | Status | Gate |
 | --- | --- | --- |
 | 1 Freeze, formalize and pilot | Implemented locally on branch `stage-1`; not pushed | G0: 4 of 6 items met; mentor sign-off and GitHub CI run outstanding |
-| 2 Design the intent and the gate | In progress: S2-P2 on `main` (`dfd30d6`); S2-P4 on `feat/s2-p4-decision`; S2-P1, S2-P3, S2-P5 next | G1 |
+| 2 Design the intent and the gate | In progress: S2-P2 on `main` (`dfd30d6`); S2-P4 and S2-P1 on local branches; S2-P3, S2-P5 next | G1 |
 | 3 Effect model and Benchmark v2 | Not started | G2 |
 | 4 Baselines, tuning and pre-registration | Not started | G3 |
 | 5 Evaluate, analyse and release | Not started | G4, G5 |
 
 ## Stage 2: Design the intent and the gate
+
+### S2-P1 Canonical actions, paraphrase suite, Events channel
+
+**Date:** 26 November 2026. **Branch:** `feat/s2-p1-canonical`, stacked on `feat/s2-p4-decision`.
+
+| Item | Result |
+| --- | --- |
+| Canonicaliser (`kube/canonical.py`) | `canonicalize(raw)` maps kubectl `scale`, `rollout restart`, `set image` and `patch` lines, JSON / merge / strategic patches and server-side-apply bodies (apps/v1 Deployment, v1 Service, v1 ConfigMap) to exactly one typed action. Everything else is `UNRECOGNIZED_FORM`: verbs with no typed operation (delete, apply -f, exec, label, create, helm), a missing namespace, more than one object or change, `--all`/`-l`, unknown flags (`--context`, `--kubeconfig`), extra fields, a container image by list index, shell chains. `ExecutionGateway.propose_raw()` decides only the canonical typed action |
+| Paraphrase suite (`tests/security/test_paraphrase.py`) | All 53 attacked cases (restart 10, image 10, scale 10, config 10, selector 10, pilot 3), five or more raw forms each, all canonicalise to the typed action. Restart and selector cases also run through the real gateway with and without task policy: every variant gets the same status, reason and writes (task policy: BLOCK, no writes; unprotected: ALLOW with a dry-run and a write) |
+| Events channel | `EventsRead` / `read_events` in the gateway; `evidence/events.py` lists core/v1 Events for one involved object, newest five, bounded excerpt with the newest Event as source, timestamp and SHA-256, marked untrusted. `inject_event` creates the payload Event with the fixture identity and checks it is stored unchanged. Registered as the fifth channel in `bench/channels.py` for memory and kind; the kind lab's `setup` role may create Events and `reader` may list them |
+| Tests | `tests/kube/test_canonical.py` (53), `tests/evidence/test_events.py` (7), `tests/security/test_paraphrase.py` (101), opt-in `tests/integration/test_kind_events.py`. Full suite 963 passed, 8 skipped. On kind `opsguard-lab` all 6 integration tests pass, including the Events smoke test (payload intact, digest matches, reader cannot create Events) |
+| Parity | Memory selector matrix against `main`: 0 outcome differences. Validation OK |
+
+**Notes.** No case uses the Events channel yet; allocation reports list it only once a case does, so the team plan is unchanged. Stage 3 adds Events cases. A merge patch of `spec.selector` maps to `set_selector`, which replaces the whole map; the typed action is what gets decided and written.
 
 ### S2-P4 Three-step decision and episode state
 

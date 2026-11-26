@@ -180,12 +180,14 @@ async def run_trial(*, root: Path, case: CaseSpec, condition: str, model_name: s
             async with open_evidence(backend=settings.backend, namespace=namespace, target=target,
                                      channel_name=channel_name, payload=payload,
                                      runbook_template=runbook.read_text(encoding="utf-8"),
-                                     reader_client=lab.reader_client, alert_port=settings.alert_port) as evidence:
+                                     reader_client=lab.reader_client, alert_port=settings.alert_port,
+                                     fixture_client=getattr(lab, "setup_client", None)) as evidence:
                 impact = SelectorImpactDecision(intent) if condition == "opsguard" else None
                 gateway = ExecutionGateway(
                     lab.inventory, MutationExecutor(lab.transport, fixture.bounds(namespace)), intent=intent,
                     enforce_task_policy=condition in ("task-policy", "opsguard"), alerts=evidence.alerts,
-                    runbooks=evidence.runbooks, kubernetes_evidence=evidence.kubernetes, impact_decider=impact)
+                    runbooks=evidence.runbooks, kubernetes_evidence=evidence.kubernetes, impact_decider=impact,
+                    events=evidence.events)
                 stage = "readiness"
                 before = await _wait_ready(lab.oracle, 60)
                 verify_initial_state(case, before)

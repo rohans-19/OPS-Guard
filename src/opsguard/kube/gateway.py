@@ -9,13 +9,14 @@ import httpx
 from pydantic import TypeAdapter
 
 from opsguard.agent.interfaces import GatewayResult
-from opsguard.contracts import (AlertsRead, ConfigMapRead, DeploymentRead, PodLogsRead, RunbookRead, ServiceRead,
-                                SupportedAction, WireModel)
+from opsguard.contracts import (AlertsRead, ConfigMapRead, DeploymentRead, EventsRead, PodLogsRead, RunbookRead,
+                                ServiceRead, SupportedAction, WireModel)
 from opsguard.impact.assessment import EpisodeState
 from opsguard.intent.evidence import EvidenceRegistry
 from opsguard.intent.models import IntentSpecV2, verify_intent
 from opsguard.intent.policy import evaluate_policy
 from opsguard.intent.resolver import check_binding, resolve_diagnostic_target
+from opsguard.kube.canonical import Rejection, canonicalize
 from opsguard.kube.executor import MutationExecutor
 
 
@@ -37,7 +38,7 @@ class ExecutionGateway:
 
     def __init__(self, inventory, executor: MutationExecutor, *, intent, enforce_task_policy=True,
                  alerts=None, runbooks=None, kubernetes_evidence=None, impact_decider=None, on_event=None,
-                 intent_key: bytes | None = None, clock=None):
+                 intent_key: bytes | None = None, clock=None, events=None):
         # A signed IntentSpecV2 is verified on every proposal; a v1 TaskIntent is trusted as configured.
         self.signed_intent = intent if isinstance(intent, IntentSpecV2) else None
         if self.signed_intent is not None:
@@ -54,6 +55,7 @@ class ExecutionGateway:
         self.enforce_task_policy = enforce_task_policy
         self.alerts, self.runbooks, self.impact_decider = alerts, runbooks, impact_decider
         self.kubernetes_evidence = kubernetes_evidence
+        self.events = events
         self.evidence = EvidenceRegistry(intent.task_id)
         # Start snapshot plus every applied change, so a decider can judge the sequence.
         self.episode = EpisodeState(intent.task_id)
@@ -93,6 +95,8 @@ class ExecutionGateway:
                 record = await self.kubernetes_evidence.read_logs(request,timeout_seconds=timeout_seconds-(monotonic()-started))
             elif isinstance(request, ConfigMapRead) and self.kubernetes_evidence:
                 record = await self.kubernetes_evidence.read_configmap(request,timeout_seconds=timeout_seconds-(monotonic()-started))
+            elif isinstance(request, EventsRead) and self.events:
+                record = await self.events.read_events(request, timeout_seconds=timeout_seconds-(monotonic()-started))
             else:
                 return GatewayResult(status="BLOCK", reason="UNSUPPORTED_READ")
         except PermissionError:
@@ -113,6 +117,16 @@ class ExecutionGateway:
         return GatewayResult(status="OK", reason="SERVICE_STATE", data={
             "name": request.name, "uid": services[0]["metadata"].get("uid"),
             "selector": {str(key): str(value) for key, value in selector.items()}, "ready_endpoints": ready})
+
+    async def propose_raw(self, raw, *, task_id, timeout_seconds, observation_ids=()):
+        """A raw form (kubectl line, patch, apply body) is decided only as its one typed action."""
+        typed = canonicalize(raw)
+        if isinstance(typed, Rejection):
+            self.on_event({"event": "canonical_rejection", "reason": typed.reason, "detail": typed.detail})
+            return GatewayResult(status="BLOCK", reason=typed.reason, data={"detail": typed.detail})
+        self.on_event({"event": "canonicalized", "action": typed.model_dump(mode="json")})
+        return await self.propose(typed, task_id=task_id, timeout_seconds=timeout_seconds,
+                                  observation_ids=observation_ids)
 
     async def propose(self, request, *, task_id, timeout_seconds, observation_ids=()):
         try:
