@@ -2,9 +2,13 @@
 
 import asyncio
 from dataclasses import dataclass
+import hashlib
+import hmac
+import json
 import math
 from time import monotonic
 from typing import Literal, Protocol
+from uuid import uuid4
 
 import httpx
 from pydantic import Field
@@ -45,6 +49,39 @@ class ExecutionResult(WireModel):
     object: dict = Field(default_factory=dict)
 
 
+class SignedDecision(WireModel):
+    """An ALLOW bound to one prepared request and one intent.
+
+    The executor recomputes the request digest and the MAC, and refuses a
+    decision it has already used, so a forged or replayed decision never writes.
+    """
+
+    status: Literal["ALLOW"] = "ALLOW"
+    decision_id: str = Field(min_length=16, max_length=64)
+    intent_id: str = Field(min_length=1, max_length=253)
+    request_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    mac: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+def request_digest(mutation: PreparedMutation) -> str:
+    """SHA-256 of exactly what would be sent: method, path, content type, body and bound identity."""
+    material = {"method": mutation.method, "path": mutation.path, "content_type": mutation.content_type,
+                "body": mutation.body_json, "target": mutation.target.model_dump()}
+    return hashlib.sha256(json.dumps(material, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def _mac(key: bytes, decision_id: str, intent_id: str, digest: str) -> str:
+    message = json.dumps(["ALLOW", decision_id, intent_id, digest], separators=(",", ":")).encode()
+    return hmac.new(key, message, hashlib.sha256).hexdigest()
+
+
+def sign_decision(key: bytes, mutation: PreparedMutation, intent_id: str) -> SignedDecision:
+    digest = request_digest(mutation)
+    decision_id = uuid4().hex
+    return SignedDecision(decision_id=decision_id, intent_id=intent_id, request_sha256=digest,
+                          mac=_mac(key, decision_id, intent_id, digest))
+
+
 @dataclass
 class _Ticket:
     mutation: PreparedMutation
@@ -60,7 +97,12 @@ class MutationExecutor:
     """
 
     def __init__(self, transport: MutationTransport, bounds: LabBounds, *, registry: OperationRegistry | None = None,
-                 preparation_ttl: float = 120):
+                 preparation_ttl: float = 120, decision_key: bytes | None = None, intent_id: str | None = None):
+        # With a decision key, a write needs a SignedDecision for exactly this request and intent.
+        if decision_key is not None and len(decision_key) < 32:
+            raise ValueError("the decision key must be at least 32 bytes")
+        self.decision_key, self.intent_id = decision_key, intent_id
+        self._used_decisions: set[str] = set()
         if not math.isfinite(preparation_ttl) or preparation_ttl <= 0:
             raise ValueError("preparation lifetime must be positive and finite")
         self.transport, self.bounds = transport, bounds
@@ -108,10 +150,33 @@ class MutationExecutor:
             self.discard(mutation)
         return result
 
-    async def execute(self, mutation: PreparedMutation, *, decision: str, timeout_seconds: float) -> ExecutionResult:
-        if decision != "ALLOW":
+    def _verify(self, mutation: PreparedMutation, decision) -> str | None:
+        """None when the decision authorizes this exact write, else the refusal reason."""
+        if self.decision_key is None:
+            return None if decision == "ALLOW" else "WRITE_WITHHELD"
+        if not isinstance(decision, SignedDecision):
+            return "DECISION_UNSIGNED"
+        expected = _mac(self.decision_key, decision.decision_id, decision.intent_id, decision.request_sha256)
+        if not hmac.compare_digest(expected, decision.mac):
+            return "DECISION_FORGED"
+        if decision.decision_id in self._used_decisions:
+            return "DECISION_REPLAYED"
+        if not hmac.compare_digest(decision.request_sha256, request_digest(mutation)):
+            return "DECISION_REQUEST_MISMATCH"
+        if self.intent_id is not None and decision.intent_id != self.intent_id:
+            return "DECISION_INTENT_MISMATCH"
+        return None
+
+    async def execute(self, mutation: PreparedMutation, *, decision, timeout_seconds: float) -> ExecutionResult:
+        if decision in ("BLOCK", "ESCALATE"):
             self.discard(mutation)
-            return ExecutionResult(status="ESCALATE" if decision == "ESCALATE" else "BLOCK", reason="WRITE_WITHHELD")
+            return ExecutionResult(status=decision, reason="WRITE_WITHHELD")
+        refusal = self._verify(mutation, decision)
+        if refusal is not None:
+            self.discard(mutation)
+            return ExecutionResult(status="BLOCK", reason=refusal)
+        if isinstance(decision, SignedDecision):
+            self._used_decisions.add(decision.decision_id)  # Spent even if the write later fails.
         if not self._claim(mutation, "previewed", "executing"):
             return ExecutionResult(status="BLOCK", reason="PREVIEW_REQUIRED_OR_EXPIRED")
         self.discard(mutation)

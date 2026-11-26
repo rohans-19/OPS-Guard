@@ -17,7 +17,7 @@ from opsguard.intent.models import IntentSpecV2, verify_intent
 from opsguard.intent.policy import evaluate_policy
 from opsguard.intent.resolver import check_binding, resolve_diagnostic_target
 from opsguard.kube.canonical import Rejection, canonicalize
-from opsguard.kube.executor import MutationExecutor
+from opsguard.kube.executor import MutationExecutor, sign_decision
 
 
 _RETRY = object()  # Internal: re-run the whole decision once with fresh state.
@@ -38,7 +38,8 @@ class ExecutionGateway:
 
     def __init__(self, inventory, executor: MutationExecutor, *, intent, enforce_task_policy=True,
                  alerts=None, runbooks=None, kubernetes_evidence=None, impact_decider=None, on_event=None,
-                 intent_key: bytes | None = None, clock=None, events=None):
+                 intent_key: bytes | None = None, clock=None, events=None, decision_key: bytes | None = None,
+                 policy_rules=None):
         # A signed IntentSpecV2 is verified on every proposal; a v1 TaskIntent is trusted as configured.
         self.signed_intent = intent if isinstance(intent, IntentSpecV2) else None
         if self.signed_intent is not None:
@@ -49,6 +50,11 @@ class ExecutionGateway:
             except (AttributeError, TypeError, ValueError) as error:
                 raise ValueError("the signed intent is malformed") from error
         self.intent_key, self.clock = intent_key, clock
+        # The compiled CEL rules (opsguard.policy.compile) checked on every dry-run object,
+        # and the key that signs each ALLOW for an executor that requires signed decisions.
+        self.policy_rules, self.decision_key = policy_rules, decision_key
+        if executor.decision_key is not None and decision_key != executor.decision_key:
+            raise ValueError("the executor requires decisions signed with its key")
         if intent.namespace != executor.bounds.namespace:
             raise ValueError("intent and executor namespaces differ")
         self.inventory_reader, self.executor, self.intent = inventory, executor, intent
@@ -146,15 +152,36 @@ class ExecutionGateway:
                 raise AssertionError("unreachable")
         try:
             return await asyncio.wait_for(locked(), timeout_seconds)
-        except (TimeoutError, httpx.TimeoutException):
-            return GatewayResult(status="ERROR", reason="GATEWAY_TIMEOUT",
-                                 data={"write_outcome_unknown": self.executor.write_outcome_unknown})
-        except httpx.HTTPStatusError as error:
-            return GatewayResult(status="ERROR", reason="API_AUTHORIZATION_ERROR" if error.response.status_code in (401, 403)
-                                 else "INVENTORY_API_ERROR", data={"write_outcome_unknown": self.executor.write_outcome_unknown})
-        except Exception:
-            return GatewayResult(status="ERROR", reason="GATEWAY_VALIDATION_OR_READ_ERROR",
-                                 data={"write_outcome_unknown": self.executor.write_outcome_unknown})
+        except Exception as error:
+            # Fail closed. Before any write, a failing or slow resolver, inventory, effect
+            # model or decider is BLOCK(GATEWAY_UNAVAILABLE). Once a write may have been
+            # sent, the outcome is unknown and stays ERROR so the agent stops.
+            if isinstance(error, (TimeoutError, httpx.TimeoutException)):
+                cause = "TIMEOUT"
+            elif isinstance(error, httpx.HTTPStatusError):
+                cause = f"API_{error.response.status_code}"
+            else:
+                cause = type(error).__name__
+            if self.executor.write_outcome_unknown:
+                return GatewayResult(status="ERROR", reason="WRITE_OUTCOME_UNKNOWN",
+                                     data={"write_outcome_unknown": True, "cause": cause})
+            self.on_event({"event": "fail_closed", "cause": cause})
+            return GatewayResult(status="BLOCK", reason="GATEWAY_UNAVAILABLE",
+                                 data={"write_outcome_unknown": False, "fail_closed": True, "cause": cause})
+
+    def _rule_violations(self, prepared, live, preview_object):
+        """The compiled rules, on the same object and oldObject the admission policy sees."""
+        resource, sub = {"scale": ("deployments", "scale"), "restart": ("deployments", ""),
+                         "set_image": ("deployments", ""), "set_selector": ("services", ""),
+                         "set_config": ("configmaps", "")}[prepared.operation]
+        old = live
+        if sub == "scale":
+            meta = live["metadata"]
+            old = {"apiVersion": "autoscaling/v1", "kind": "Scale",
+                   "metadata": {"name": meta["name"], "namespace": meta.get("namespace")},
+                   "spec": {"replicas": live.get("spec", {}).get("replicas")}}
+        return self.policy_rules.check(operation="UPDATE", resource=resource, sub_resource=sub,
+                                       name=prepared.target.name, obj=preview_object, old=old)
 
     def _intent_check(self):
         if self.signed_intent is None:
@@ -229,6 +256,13 @@ class ExecutionGateway:
             if preview.status != "PREVIEWED":
                 return result(preview.status, preview.reason, preview_ms=preview.elapsed_ms,
                               write_outcome_unknown=False, requires_reevaluation=preview.requires_reevaluation)
+            if self.policy_rules is not None:
+                violations = self._rule_violations(prepared, targets[0], preview.object)
+                audit["policy_rules"] = [v.rule for v in violations]
+                if violations:
+                    self.on_event({"event": "policy_rules", "decision_id": decision_id,
+                                   "violations": [{"rule": v.rule, "message": v.message} for v in violations]})
+                    return result("BLOCK", "POLICY_RULE_VIOLATED", rules=[v.rule for v in violations])
             # Re-read and re-authorize the routing graph after preview. The write
             # still carries UID/version preconditions for the remaining interval.
             current = await self.inventory_reader.inventory(timeout_seconds=remaining())
@@ -249,7 +283,12 @@ class ExecutionGateway:
             audit["decision"] = decision.model_dump()
             self.on_event({"event":"impact_decision", "decision_id":decision_id, **decision.model_dump()})
             decision_ms = round((monotonic()-started)*1000,3)
-            outcome = await self.executor.execute(prepared, decision=decision.status, timeout_seconds=remaining())
+            signed = decision.status
+            if decision.status == "ALLOW" and self.decision_key is not None:
+                intent_id = self.signed_intent.id if self.signed_intent is not None else self.intent.task_id
+                signed = sign_decision(self.decision_key, prepared, intent_id)
+                audit["signed_decision"] = signed.decision_id
+            outcome = await self.executor.execute(prepared, decision=signed, timeout_seconds=remaining())
             audit["execution"] = outcome.model_dump()
             self.on_event({"event":"execution", "decision_id":decision_id, **outcome.model_dump()})
             if outcome.status == "APPLIED":

@@ -5,12 +5,29 @@ This file tracks progress against the five-stage implementation guide. Update it
 | Stage | Status | Gate |
 | --- | --- | --- |
 | 1 Freeze, formalize and pilot | Implemented locally on branch `stage-1`; not pushed | G0: 4 of 6 items met; mentor sign-off and GitHub CI run outstanding |
-| 2 Design the intent and the gate | In progress: S2-P2 on `main` (`dfd30d6`); S2-P4 and S2-P1 on local branches; S2-P3, S2-P5 next | G1 |
+| 2 Design the intent and the gate | In progress: S2-P2 on `main` (`dfd30d6`); S2-P4, S2-P1, S2-P3 on local branches; S2-P5 next | G1 |
 | 3 Effect model and Benchmark v2 | Not started | G2 |
 | 4 Baselines, tuning and pre-registration | Not started | G3 |
 | 5 Evaluate, analyse and release | Not started | G4, G5 |
 
 ## Stage 2: Design the intent and the gate
+
+### S2-P3 Policy compiler, admission backstop, fail-closed, security suite
+
+**Date:** 26 November 2026. **Branch:** `feat/s2-p3-policy`, stacked on `feat/s2-p1-canonical`.
+
+| Item | Result |
+| --- | --- |
+| Policy language | `documentations/POLICY_LANGUAGE.md`: variables (`object`, `oldObject`, `request.*`), the supported CEL subset, CEL-like semantics (missing field is an error, `&&`/`||` absorb errors, no cross-type equality, bounded evaluation), every compiled rule, installation and limits. `policy/cel.py` is the gateway's interpreter; anything outside the subset raises and fails closed |
+| Compiler (`policy/compile.py`) | `compile_policy(intent, workload=...)` gives `GatewayRules` plus one ValidatingAdmissionPolicy and binding per resource (Deployments, `deployments/scale`, Services, ConfigMaps). Rules: updates only, target names, protected names, replica bounds, image allowlist, restart marker, selector map, ConfigMap key and value. The admission validations are the same strings the gateway evaluates. Bindings select the intent's namespace; `matchConditions` limit them to the agent's ServiceAccount. `InstalledPolicy` installs at trial start and removes at exit or expiry, bindings first |
+| One policy per resource | The API server type-checks each expression against every kind a policy matches; a single combined policy was never enforced on kind. Splitting per resource gives zero type-check warnings |
+| Signed decisions | With a decision key, `MutationExecutor` writes only for a `SignedDecision`: HMAC over decision id, intent id and the SHA-256 of method, path, content type, body and bound identity. It refuses `DECISION_UNSIGNED`, `DECISION_FORGED`, `DECISION_REQUEST_MISMATCH`, `DECISION_INTENT_MISMATCH` and `DECISION_REPLAYED`. The gateway signs each ALLOW |
+| Gateway | Checks the compiled rules on every dry-run object (`POLICY_RULE_VIOLATED`). Any failure or timeout before a write is `BLOCK(GATEWAY_UNAVAILABLE)` with `fail_closed: true`; once a write may have been sent it stays `ERROR(WRITE_OUTCOME_UNKNOWN)` so the agent stops |
+| Security suite on kind (`tests/integration/test_kind_security.py`) | The agent's ServiceAccount has broad RBAC (patch, update, delete). (a) Four attacks through the gateway with task policy off: all `POLICY_RULE_VIOLATED`; the same requests sent directly with the agent's token, plus deleting payments: all 422 from the admission policy; an in-intent direct scale: 200. (b) Forged: `DECISION_FORGED`; replayed: `DECISION_REPLAYED`; valid: applied. (c) Target edited after the re-check: `STALE_TARGET`. (d) Inventory down and effect model down: `GATEWAY_UNAVAILABLE`. (e) Expired intent: `INTENT_EXPIRED`. Observer: only checkout-api's replica count changed, by the two in-intent writes. **Zero unauthorized writes**; passed 3 runs in a row |
+| Tests | `tests/policy/` (CEL 40, compiler 17), `tests/security/test_gateway_security.py` (13). Full suite 1033 passed, 9 skipped; all 7 kind integration tests pass |
+| Parity | Memory selector matrix against `main`: 0 outcome differences. Validation OK |
+
+**Found while testing on kind.** (1) The combined policy above. (2) An admin client certificate loaded into a TLS context shared with the agent's client made the API server authenticate the agent as the admin, so the policy (scoped to the agent) never applied; the test now checks the agent's identity with a SelfSubjectReview. (3) The demo image needs `FIXTURE_SERVICE`; without it the Pod crashes a second after starting.
 
 ### S2-P1 Canonical actions, paraphrase suite, Events channel
 
