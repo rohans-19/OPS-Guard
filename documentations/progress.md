@@ -5,12 +5,39 @@ This file tracks progress against the five-stage implementation guide. Update it
 | Stage | Status | Gate |
 | --- | --- | --- |
 | 1 Freeze, formalize and pilot | Implemented locally on branch `stage-1`; not pushed | G0: 4 of 6 items met; mentor sign-off and GitHub CI run outstanding |
-| 2 Design the intent and the gate | In progress: S2-P2 on `main` (`dfd30d6`); S2-P4, S2-P1, S2-P3 on local branches; S2-P5 next | G1 |
+| 2 Design the intent and the gate | All five packages implemented; S2-P2 on `main`, S2-P4, S2-P1, S2-P3, S2-P5 on stacked local branches | G1: 5 of 6 items met; GitHub CI not yet run |
 | 3 Effect model and Benchmark v2 | Not started | G2 |
 | 4 Baselines, tuning and pre-registration | Not started | G3 |
 | 5 Evaluate, analyse and release | Not started | G4, G5 |
 
 ## Stage 2: Design the intent and the gate
+
+### Gate G1 checklist
+
+- [x] S2-P2: IntentSpec v2 enforced; resolver passes every situation (memory and kind); provenance blocks copied values (value matching, see limitation)
+- [x] S2-P3: the same CEL rules in the gateway and the admission policies; kind security suite shows zero unauthorized writes
+- [x] S2-P1: every paraphrase of all 53 attacked cases gets the typed form's decision; Events channel working on memory and kind
+- [x] S2-P4: episode state blocks the scale, restart, selector sequence at the selector step with `ENVELOPE_CUMULATIVE`
+- [x] S2-P5: all 73 cases through one CLI; parity with the old runners: 261 cells, 0 differences
+- [ ] CI green: **not run**. S2-P2 is on `main`; S2-P4, S2-P1, S2-P3 and S2-P5 are local commits waiting for your go-ahead to push
+
+Full suite: 1055 passed, 9 skipped. Kind integration (opt-in, `opsguard-lab`): 7 tests; 7 of 7 passed in 5 consecutive runs after one earlier run had a single failure that was not captured and has not reproduced.
+
+### S2-P5 Unified runner and schema v2
+
+**Date:** 26 November 2026. **Branch:** `feat/s2-p5-runner`, stacked on `feat/s2-p3-policy`.
+
+| Item | Result |
+| --- | --- |
+| CaseSpec v2 (`bench/schema.py`) | Adds suite, goal (G1–G8 or none), allowed changes, invariants, severity detectors, payload and payload position, family id, split, executable oracle text and source reference. `goal` and `oracle` have no defaults, so a case without them is rejected; attacked/clean consistency is enforced |
+| Converters (`bench/convert/`) | All six suites (selector, scale, image, restart, config, pilot) convert to 73 CaseSpec v2; goals come from `case_goal_map.csv` and match the threat model (G1 31, G3 14, G7 6, G4 2, clean 20). Splits are provisional (hash of family id, about 20/20/60; with few families today it is 24/10/39); Stage 3 seals them |
+| RunResult v2 | Worst severity tier, partial-harm flags, every gateway decision with its reason, token counts and cost, intent id, suite condition, samples. v1 RunResult gains the optional severity fields |
+| Observer sampling | `IntervalSampler` samples the oracle every `sample_interval` (default 1 s) during the agent run in the common runner; `assess()` gives S0–S3 from ready endpoints, probe answers and ready replicas against the start state; the worst tier latches. Case detectors raise the tier by goal (G1 S2, G3 S3, G4 S1, G7 S5) |
+| Unified CLI (`python -m opsguard.bench.unified run`) | One command, one result format; per-suite adapters call each suite's existing in-memory trial code. Full matrix: 73 cases, 261 trials, 0 errors, 31 cells skipped where a suite does not implement a condition (listed in `skipped.json`) |
+| Parity (`python -m opsguard.bench.unified parity`) | Runs the six old per-suite commands unchanged and compares outcomes cell by cell: 261 compared, **0 differences**, 0 unexplained. 6 old cells have no unified row: the pilot's `rbac-scoped` and `opsguard-v1.0` comparison conditions, explained in the report |
+| Tests | `tests/bench/test_unified.py` (22): conversion, schema rejections (missing goal or oracle), RunResult v2 shape, severity tiers, interval sampler catching a brief outage, decisions and tokens from traces, one attacked case per suite through the runner, CLI |
+
+**Gap carried into Stage 3.** Only the common (selector) runner samples at a fixed interval; the scale, image, restart and config runners still sample after each action, so their worst tier comes from the case detectors. Stage 3's shared fixtures move them onto the interval sampler.
 
 ### S2-P3 Policy compiler, admission backstop, fail-closed, security suite
 

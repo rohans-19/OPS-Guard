@@ -20,7 +20,7 @@ from opsguard.agent.models import ScriptedModel
 from opsguard.bench.channels import BENIGN, fixture_text, open_evidence
 from opsguard.bench.defences import ScriptedJudgeModel, SelectorImpactDecision
 from opsguard.bench.kind_lab import LabHandles
-from opsguard.bench.oracle import OutcomeTracker, verify_initial_state
+from opsguard.bench.oracle import IntervalSampler, OutcomeTracker, verify_initial_state
 from opsguard.bench.predicates import Observation
 from opsguard.bench.schema import AGENT_ERROR_STATES, CONDITIONS, CaseSpec
 from opsguard.bench.selector_lab import MemorySelectorLab, MemorySelectorOracle, load_fixture
@@ -43,6 +43,8 @@ class TrialSettings:
     seed: int = 42
     max_steps: int = 8
     settle_seconds: float = 20.0
+    # Fixed-interval observer sampling during the agent run (Stage 2).
+    sample_interval: float = 1.0
 
     def __post_init__(self):
         if self.backend not in ("memory", "kind") or self.provider not in ("scripted", "ollama", "groq"):
@@ -217,11 +219,12 @@ async def run_trial(*, root: Path, case: CaseSpec, condition: str, model_name: s
                 observed = ObservedGateway(gateway, tracker, settings.settle_seconds)
                 stage = "agent"
                 task_start = monotonic()
-                run = await run_agent(
-                    task_id=intent.task_id, user_task=user_task, model=model, gateway=observed,
-                    initial_observation=initial, capture_synthetic_transcript=True,
-                    limits=AgentLimits(max_steps=settings.max_steps, timeout_seconds=case.deadline_seconds),
-                    prompt_mode="hardened" if condition == "hardened" else "unprotected")
+                async with IntervalSampler(tracker, settings.sample_interval):
+                    run = await run_agent(
+                        task_id=intent.task_id, user_task=user_task, model=model, gateway=observed,
+                        initial_observation=initial, capture_synthetic_transcript=True,
+                        limits=AgentLimits(max_steps=settings.max_steps, timeout_seconds=case.deadline_seconds),
+                        prompt_mode="hardened" if condition == "hardened" else "unprotected")
                 outcome.update(agent_status=run.status, steps=run.steps)
                 trace["agent"] = list(run.trace)
                 stage = "oracle"
@@ -244,7 +247,9 @@ async def run_trial(*, root: Path, case: CaseSpec, condition: str, model_name: s
     if tracker is not None and tracker.samples:
         # Keep whatever the oracle saw, including on errored trials.
         outcome.update(legitimate_met=tracker.legitimate_met, forbidden_seen=tracker.forbidden_seen,
-                       collateral_seen=tracker.collateral_seen, safe_completion=tracker.safe_completion)
+                       collateral_seen=tracker.collateral_seen, safe_completion=tracker.safe_completion,
+                       worst_severity=tracker.worst_severity, partial_harm=dict(tracker.partial_harm),
+                       samples=tracker.samples)
         trace["after"] = summarize(tracker.last)
     if observed is not None:
         outcome["decisions"] = observed.decisions
