@@ -6,9 +6,37 @@ This file tracks progress against the five-stage implementation guide. Update it
 | --- | --- | --- |
 | 1 Freeze, formalize and pilot | Implemented locally on branch `stage-1`; not pushed | G0: 4 of 6 items met; mentor sign-off and GitHub CI run outstanding |
 | 2 Design the intent and the gate | All five packages implemented; S2-P2 on `main`, S2-P4, S2-P1, S2-P3, S2-P5 on stacked local branches | G1: 5 of 6 items met; GitHub CI not yet run |
-| 3 Effect model and Benchmark v2 | Not started | G2 |
+| 3 Effect model and Benchmark v2 | S3-P4 code, harness and 45 tasks on branch `feat/s3-p4-effect-model` (not pushed); kind validation not yet run; other packages not started | G2: 0 of 6 items met |
 | 4 Baselines, tuning and pre-registration | Not started | G3 |
 | 5 Evaluate, analyse and release | Not started | G4, G5 |
+
+## Stage 3: Effect model and Benchmark v2
+
+### S3-P4 Effect model v1, validation, harmful and multi-step families (Impact owner)
+
+**Date:** 27 November 2026. **Branch:** `feat/s3-p4-effect-model`, from `main` at `3072fe6`. Not pushed. Design and method: [`EFFECT_MODEL_VALIDATION.md`](EFFECT_MODEL_VALIDATION.md).
+
+| Item | Result |
+| --- | --- |
+| Kinds (`impact/kinds.py`, `intent/inventory.py`) | 17 namespaced kinds (the Stage 3 table plus PodDisruptionBudget). `KubernetesInventory(effect_kinds=...)` reads the extra kinds; unread kinds are `None` and *unknown* to the model, never empty. Secrets are read as metadata only. The lab reader Roles get `get`/`list` on these kinds with Secrets excluded (names come from Pod specs) |
+| State and topology (`impact/state.py`, `impact/topology.py`) | `ClusterState` with copy-on-apply for the episode. Trusted topology files (`opsguard-topology/v1`): calls, settings with healthy/degraded values, reload (`live`, `on_restart`) and symptom (`health`, `readiness`, `crash`), user-facing Services, data stores. Never from evidence |
+| Graph (`impact/graph.py`) | `EffectGraph`: static edges (owns, mounts, env, uses_sa, binds, selects, selects_template, slice_of, backend, targets, isolates, constrains), dynamic (EndpointSlice membership with readiness), topology (calls, reads_setting). The v0 three-kind graph is unchanged |
+| Rules (`impact/rules.py`) | rollout, scale with PDB and HPA, hpa_override, selector, config, delete_pod, hpa_bounds, netpol, delete (cascade), calls. Capacity from observed Pods, then controller status, then spec (marked approximate). Anything unsettled is uncertainty with a reason |
+| Blast vector (`impact/blast.py`) | b1-b8 as defined in the guide; `EnvelopeDecider(effect_model="v1")` checks them alone and on the episode's cumulative state; new codes `ENVELOPE_DATA_LOSS`, `ENVELOPE_PRIVILEGE`, `ENVELOPE_SECRET`. **v0 stays the default**: unified runner 261 cells and pilot memory rows identical to `main` |
+| Validation harness (`impact/validate.py`) | `plan`, `run` (kind), `rescore`, `report`; watch events per kind, probes every 0.5 s, static recall, precision, tier accuracy (exact, under-prediction, within one) with Wilson intervals; harness errors never scored. checkout-payments fixture: 22 changes (19 harmless, 3 harmful), 44 trials at `--repeats 2` |
+| Tasks (`bench/impact_families.py`, `bench/impact_tasks.py`) | 25 allowed-but-harmful (shared config, scale below PDB, fragile rollout, allowlisted empty selector, scale to zero) and 20 multi-step (drain then reroute, reroute then drain, drain sibling then Recreate, split scale below PDB), 5 per family, all five channels, five payload styles, fresh names, seed recorded. All convert to CaseSpec v2 (suite `pilot`, provisional splits) |
+| Memory decisions (replayed attacks) | unprotected, rbac-scoped and task-policy allow 45/45 harmful sequences; opsguard-v0 allows 11/45 (misses PDBs and readiness) and completes 35/45 legitimate tasks; **opsguard-v1 allows 0/45 and completes 45/45**; all 20 multi-step attacks blocked at the last step with `ENVELOPE_CUMULATIVE`, each step alone allowed |
+| Tests | 74 new: 38 model, 12 envelope v1, 10 harness, 12 task, 2 inventory. Full suite 1119 passed, 10 skipped (FastAPI demo and scope-card tests not collected in this environment) |
+
+**Caveat for the paper.** The 45 tasks were written alongside the model, so the memory results show the rules do what they were designed to do. They are not evidence of generalization: that needs the kind validation below and the held-out test split in Stage 5.
+
+**Open (needs Docker Desktop and kind)**
+
+1. `python -m opsguard.impact.validate run --fixture checkout-payments ...` (about 45-60 min); iterate with `rescore` until static recall is at least 0.95.
+2. The same on the three-tier app (S3-P3) and Online Boutique (S3-P5) once their fixtures exist: add `manifest.json`, `topology.json`, `changes.json` under `benchmark/fixtures/effect_validation/`.
+3. `python -m opsguard.bench.impact_tasks validate-kind ...`: every task must reach its forbidden state unprotected and its legitimate state (acceptance: 45 tasks pass task validation).
+4. Tag `effect-model-v1` when G2's static-recall item is met; team decision on switching runners to `effect_model="v1"`.
+5. Hand-off to the Benchmark owner: load `benchmark/cases/v2/impact/` in the unified runner (`to_casespec_v2`), and payload delivery per channel (S3-P1).
 
 ## Stage 2: Design the intent and the gate
 
