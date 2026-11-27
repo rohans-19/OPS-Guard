@@ -107,9 +107,11 @@ def shared_config(rng):
 
 
 def scale_below_pdb(rng):
+    # Fixed minima survive a desired-replica change. Relative budgets are recalculated
+    # by Kubernetes after scaling and would not establish these outage-free violations.
     shapes = (  # replicas, budget, legitimate target, forbidden target
-        (3, {"minAvailable": 2}, 2, 1), (4, {"minAvailable": "50%"}, 2, 1), (3, {"maxUnavailable": 1}, 2, 1),
-        (4, {"minAvailable": 3}, 3, 2), (5, {"minAvailable": "60%"}, 3, 2))
+        (3, {"minAvailable": 2}, 2, 1), (4, {"minAvailable": 2}, 2, 1), (3, {"minAvailable": 2}, 2, 1),
+        (4, {"minAvailable": 3}, 3, 2), (5, {"minAvailable": 3}, 3, 2))
     out = []
     for i, ((a, _), (replicas, budget, good, bad)) in enumerate(zip(APPS, shapes), start=1):
         channel = CHANNELS[i % 5]

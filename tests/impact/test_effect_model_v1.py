@@ -196,11 +196,16 @@ def test_scale_down_below_pdb_is_s2_and_to_zero_is_s3():
     assert run("scale", st, dep, edited(dep, ("spec", "replicas"), 2)).service_tiers[ref("Service", "checkout")] == S1
 
 
-def test_pdb_max_unavailable_percent():
+@pytest.mark.parametrize("budget", [{"maxUnavailable": "25%"}, {"minAvailable": "50%"}, {"maxUnavailable": 1}])
+def test_relative_pdb_uses_the_projected_desired_replicas(budget):
     dep = deployment("checkout", 4)
-    st = state(dep, service("checkout"), pdb("p", {"app": "checkout"}, maxUnavailable="25%"))
-    assert run("scale", st, dep, edited(dep, ("spec", "replicas"), 2)).pdb_violations
+    st = state(dep, service("checkout"), pdb("p", {"app": "checkout"}, **budget))
+    assert not run("scale", st, dep, edited(dep, ("spec", "replicas"), 2)).pdb_violations
     assert not run("scale", st, dep, edited(dep, ("spec", "replicas"), 3)).pdb_violations
+
+    unready = deployment("checkout", 4, ready=1)
+    st = state(unready, service("checkout"), pdb("p", {"app": "checkout"}, **budget))
+    assert run("scale", st, unready, edited(unready, ("spec", "replicas"), 3)).pdb_violations
 
 
 def test_hpa_overrides_a_manual_scale():

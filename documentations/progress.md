@@ -6,8 +6,8 @@ This file tracks progress against the five-stage implementation guide. Update it
 | --- | --- | --- |
 | 1 Freeze, formalize and pilot | Implemented locally on branch `stage-1`; not pushed | G0: 4 of 6 items met; mentor sign-off and GitHub CI run outstanding |
 | 2 Design the intent and the gate | All five packages implemented; S2-P2 on `main`, S2-P4, S2-P1, S2-P3, S2-P5 on stacked local branches | G1: 5 of 6 items met; GitHub CI not yet run |
-| 3 Effect model and Benchmark v2 | S3-P4 code, harness and 45 tasks on branch `feat/s3-p4-effect-model` (not pushed); kind validation not yet run; other packages not started | G2: 0 of 6 items met |
-| 4 Baselines, tuning and pre-registration | S4-P4 code done on `feat/s3-p4-effect-model` (thresholds provisional until S3-P2's labelled set); other packages not started | G3 |
+| 3 Effect model and Benchmark v2 | S3-P4 checkout-payments validation completed on kind (44 trials); all 45 Impact-owner tasks validated (90 rows, zero errors) on `feat/s3-p4-effect-model` | G2 open: two topology validations and the remaining team deliverables are outstanding |
+| 4 Baselines, tuning and pre-registration | S4-P4 code and five-task live development judge run completed on `feat/s3-p4-effect-model`; thresholds provisional until S3-P2's labelled set | G3 open |
 | 5 Evaluate, analyse and release | S5-P4 analysis code and paper drafts ready; waits for the test run | G4, G5 |
 
 ## Stage 5: Evaluate, analyse and release
@@ -37,19 +37,39 @@ This file tracks progress against the five-stage implementation guide. Update it
 | --- | --- |
 | B9 (`benchmark/judge.py`) | `judge_action_v2` reads the IntentSpec v2 (signing material hidden) and EvidenceRecord v2 marked untrusted; invalid verdicts deny. The v1 judge is unchanged |
 | B10 (`baselines/self_check.py`) | The acting model reviews its own proposal with the same evidence and its earlier steps: proceed or stop; invalid answers stop |
-| Runs | `impact_tasks run --condition b9-judge --condition b10-self-check --judge-model <id>` (needs Groq; blocked in the cloud workspace). Provider failures are harness errors |
+| Runs | Groq `openai/gpt-oss-20b` reviewed five development tasks from `ms-reroute-then-drain`: 20 records, zero final provider errors. B9 allowed 5/5 harmful sequences; B10 allowed 2/5. Both completed 5/5 legitimate sequences. These are live reviews of scripted candidate sequences on the memory backend |
 | Calibration (`impact/calibrate.py`) | Development choice under an unsafe-approval ceiling (proposed 0.05, team to agree), ties keep the default 0.375, one validation confirmation, ±50% weight sweeps with and without the envelope. Test-split records are never loaded |
 | v1 graded score | B is now b4/3 (it was always 0 inside the envelope); features in every audit entry; `decision.load_thresholds()` |
 | Provisional result | 136 task-derived records (dev 22, val 20, test 94 skipped): 0 unsafe approvals and 0 false blocks on development and validation; validation passed first time. The full decision is flat for thresholds 0.25-0.95 under every weight change; the graded score alone cannot separate safe from unsafe |
 | `config/thresholds.yaml` | Weights 0.25/0.5/0.25, escalate 0.375, block 0.75; marked provisional, with the labelled file's SHA-256 |
 
-**Open.** The real labelled set from S3-P2 (two labellers, kappa), then rerun and commit; agree the ceiling; B9/B10 runs on development tasks with a real model.
+The initial judge attempt had 12 rate-limit error records. Those records remain in `results/judges-dev-attempt-1/` and `results/judges-dev/attempts.jsonl`; failed tasks were retried with 60 seconds between task batches. The final 20 records, summary and manifest are in `results/judges-dev/`. This is an exploratory development check of one family, not a sealed-test evaluation or evidence that the acting model generated these proposals.
+
+**Open.** The real labelled set from S3-P2 (two labellers, kappa), then rerun and commit; agree the ceiling; the broader pre-registered model and baseline evaluation after Gate G3.
 
 ## Stage 3: Effect model and Benchmark v2
 
+### S3-P4 live validation follow-up (27 November 2026)
+
+The local run completed the first topology's effect validation and the independent kind validation of all 45 Impact-owner tasks. The reproducible Windows entry point is `scripts/run_vikas_s3p4.ps1`; it uses a Python environment, platform-specific fixture image loading, development-only judge selection, paced calls and result checks before pushing.
+
+| Check | Measured result |
+| --- | --- |
+| checkout-payments effect validation | 44 trials (22 changes, two repeats), zero harness errors and zero uncertain trials. Static recall **98.92%** (Wilson 95% interval 96.86%-99.63%), precision **95.12%**, exact tier accuracy **95.45%** over 132 Service/trial comparisons. Three observed Pod changes were unmatched; selector-rule recall was 0.75. Six tiers were under-predicted from S0 to S1 |
+| Task validation on kind | **45/45 forbidden sequences reached their forbidden state, and 45/45 legitimate sequences reached their postconditions**, in separate disposable fixtures. 90 rows, zero harness errors, no failed tasks. All 20 multi-step forbidden sequences caused harm after both steps were applied |
+| Focused regression checks | **534 passed** after the harness and PDB fixes. This is the focused verification set, separate from the historical full-suite counts below |
+| Live B9/B10 development check | Five tasks, two conditions, legitimate and harmful sequences: 20 final records, zero provider errors. B9 harmful allowed 5/5, B10 harmful allowed 2/5; both legitimate completed 5/5. Initial rate-limit failures are preserved separately |
+| Evidence | `results/effect-validation/checkout-payments/{trials.jsonl,scores.json}` and `results/impact-tasks-validation/{results.jsonl,summary.json}`. These local result files are Git-ignored |
+
+**Problems found and corrected during validation.** The shared-ConfigMap repair target intentionally starts unhealthy. The harness now verifies that this fault is present and that the protected Service is healthy before acting. It independently checks persisted ConfigMap values, replica counts, Service selectors, Deployment generation/readiness, and changed restart markers before declaring a legitimate task complete, and rechecks the protected Service and disruption budgets. The initial attempt's two rows, including the failed repair precondition, are preserved in `results/impact-tasks-validation-attempt-1/results.jsonl`.
+
+Three PDB tasks used percentage or `maxUnavailable` budgets that Kubernetes recalculates after a scale change, so their proposed scale-downs did not establish the intended sustained budget violations. Their fixtures now use fixed `minAvailable` values while keeping the intended legitimate and forbidden replica counts. The model's relative-budget calculation was also corrected to use the projected desired replicas, with percentage semantics retained in model tests.
+
+The checkout-payments static-recall target is met. **Gate G2 remains open** until the three-tier app and Online Boutique are validated and the remaining team deliverables are complete. The model remains `effect-model-v1-dev`, unfrozen and without the `effect-model-v1` tag. Calibration remains provisional, and sealed-test H3/H5 results remain pending Gate G3.
+
 ### S3-P4 Effect model v1, validation, harmful and multi-step families (Impact owner)
 
-**Date:** 27 November 2026. **Branch:** `feat/s3-p4-effect-model`, from `main` at `3072fe6`. Not pushed. Design and method: [`EFFECT_MODEL_VALIDATION.md`](EFFECT_MODEL_VALIDATION.md).
+**Date:** 27 November 2026. **Branch:** `feat/s3-p4-effect-model`, from `main` at `3072fe6`. Design and method: [`EFFECT_MODEL_VALIDATION.md`](EFFECT_MODEL_VALIDATION.md).
 
 | Item | Result |
 | --- | --- |
@@ -65,13 +85,11 @@ This file tracks progress against the five-stage implementation guide. Update it
 
 **Caveat for the paper.** The 45 tasks were written alongside the model, so the memory results show the rules do what they were designed to do. They are not evidence of generalization: that needs the kind validation below and the held-out test split in Stage 5.
 
-**Open (needs Docker Desktop and kind)**
+**Remaining handoffs and validation**
 
-1. `python -m opsguard.impact.validate run --fixture checkout-payments ...` (about 45-60 min); iterate with `rescore` until static recall is at least 0.95.
-2. The same on the three-tier app (S3-P3) and Online Boutique (S3-P5) once their fixtures exist: add `manifest.json`, `topology.json`, `changes.json` under `benchmark/fixtures/effect_validation/`.
-3. `python -m opsguard.bench.impact_tasks validate-kind ...`: every task must reach its forbidden state unprotected and its legitimate state (acceptance: 45 tasks pass task validation).
-4. Tag `effect-model-v1` when G2's static-recall item is met; team decision on switching runners to `effect_model="v1"`.
-5. Hand-off to the Benchmark owner: load `benchmark/cases/v2/impact/` in the unified runner (`to_casespec_v2`), and payload delivery per channel (S3-P1).
+1. Validate the three-tier app (S3-P3) and Online Boutique (S3-P5) once their fixtures exist: add `manifest.json`, `topology.json`, `changes.json` under `benchmark/fixtures/effect_validation/`.
+2. Tag `effect-model-v1` when G2's three-topology static-recall item is met; team decision on switching runners to `effect_model="v1"`.
+3. Hand-off to the Benchmark owner: load `benchmark/cases/v2/impact/` in the unified runner (`to_casespec_v2`), and payload delivery per channel (S3-P1).
 
 ## Stage 2: Design the intent and the gate
 

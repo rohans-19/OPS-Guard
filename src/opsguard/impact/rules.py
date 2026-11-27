@@ -347,21 +347,27 @@ class _Builder:
                 return ref, hpa
         return None
 
-    def _pdb_budgets(self, workload: ObjectRef) -> list[tuple[ObjectRef, int, set[ObjectRef]]]:
+    def _pdb_budgets(
+        self, workload: ObjectRef, *, desired_replicas: Optional[int] = None,
+    ) -> list[tuple[ObjectRef, int, set[ObjectRef]]]:
         """(budget, required available Pods, workloads it covers) for every PDB selecting the workload.
 
         A PDB counts every Pod its selector matches, across workloads, against the
         expected count (the sum of their desired replicas), as the disruption controller does.
+        Relative limits use the projected desired count after a scale change.
         """
         out = []
         obj = self.state.get(workload)
         workloads = self.state.workloads()
+        desired = {ref: _desired(item) for ref, item in workloads.items()}
+        if desired_replicas is not None:
+            desired[workload] = desired_replicas
         for ref, pdb in self.state.items("PodDisruptionBudget").items():
             selector = spec(pdb).get("selector") or {}
             if not selector_matches(selector, labels(pod_template(obj))):
                 continue
             covered = {w for w, o in workloads.items() if selector_matches(selector, labels(pod_template(o)))}
-            expected = sum(_desired(workloads[w]) for w in covered)
+            expected = sum(desired[w] for w in covered)
             if "minAvailable" in spec(pdb):
                 required = scaled_value(spec(pdb)["minAvailable"], expected, round_up=True)
             elif "maxUnavailable" in spec(pdb):
@@ -375,10 +381,12 @@ class _Builder:
             out.append((ref, required, covered))
         return out
 
-    def _pdb_breaches(self, workload: ObjectRef, after: int) -> list[tuple[ObjectRef, int, int]]:
+    def _pdb_breaches(
+        self, workload: ObjectRef, after: int, *, desired_replicas: Optional[int] = None,
+    ) -> list[tuple[ObjectRef, int, int]]:
         """Budgets whose covered Pods would fall below the minimum with ``after`` ready for this workload."""
         breaches = []
-        for ref, required, covered in self._pdb_budgets(workload):
+        for ref, required, covered in self._pdb_budgets(workload, desired_replicas=desired_replicas):
             total = after + sum(self.capacity.ready(w) for w in covered if w != workload)
             if total < required:
                 breaches.append((ref, required, total))
@@ -414,7 +422,7 @@ class _Builder:
         if effective < old:
             self.capacity_effect(workload, after, rule)
             if self.state.knows("PodDisruptionBudget"):
-                for ref, required, total in self._pdb_breaches(workload, after):
+                for ref, required, total in self._pdb_breaches(workload, after, desired_replicas=effective):
                     self.rule("pdb")
                     self.pdb.append(ref)
                     self.notes.append(f"{total} ready Pods would be below {ref.name}'s minimum of {required}")
@@ -595,7 +603,9 @@ class _Builder:
         elif low < (_int(spec(before).get("minReplicas"), 1)):
             self.notes.append(f"the HPA may later scale {workload.name} down to {low}")
             if self.state.knows("PodDisruptionBudget"):
-                for ref, required, total in self._pdb_breaches(workload, min(low, self.capacity.ready(workload))):
+                for ref, required, total in self._pdb_breaches(
+                    workload, min(low, self.capacity.ready(workload)), desired_replicas=low,
+                ):
                     for service in self.services_of(workload):
                         self.tier(service, S2, latent=True)
 

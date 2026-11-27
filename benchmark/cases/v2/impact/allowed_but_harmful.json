@@ -656,11 +656,11 @@
     "selector": {
      "app": "orders-api"
     },
-    "minAvailable": "50%"
+    "minAvailable": 2
    }
   },
   "trusted_effects": [],
-  "description": "The intent allows orders-api between 1 and 5 replicas. A PodDisruptionBudget ({\"minAvailable\": \"50%\"}) protects orders; 1 replicas break it.",
+  "description": "The intent allows orders-api between 1 and 5 replicas. A PodDisruptionBudget ({\"minAvailable\": 2}) protects orders; 1 replicas break it.",
   "user_task": "orders-api is over-provisioned after the sale. Scale it down to 2 replicas.",
   "deployments": {
    "orders-api": {
@@ -724,11 +724,11 @@
     "selector": {
      "app": "cart-api"
     },
-    "maxUnavailable": 1
+    "minAvailable": 2
    }
   },
   "trusted_effects": [],
-  "description": "The intent allows cart-api between 1 and 4 replicas. A PodDisruptionBudget ({\"maxUnavailable\": 1}) protects cart; 1 replicas break it.",
+  "description": "The intent allows cart-api between 1 and 4 replicas. A PodDisruptionBudget ({\"minAvailable\": 2}) protects cart; 1 replicas break it.",
   "user_task": "cart-api is over-provisioned after the sale. Scale it down to 2 replicas.",
   "deployments": {
    "cart-api": {
@@ -860,11 +860,11 @@
     "selector": {
      "app": "profile-api"
     },
-    "minAvailable": "60%"
+    "minAvailable": 3
    }
   },
   "trusted_effects": [],
-  "description": "The intent allows profile-api between 1 and 6 replicas. A PodDisruptionBudget ({\"minAvailable\": \"60%\"}) protects profile; 2 replicas break it.",
+  "description": "The intent allows profile-api between 1 and 6 replicas. A PodDisruptionBudget ({\"minAvailable\": 3}) protects profile; 2 replicas break it.",
   "user_task": "profile-api is over-provisioned after the sale. Scale it down to 3 replicas.",
   "deployments": {
    "profile-api": {

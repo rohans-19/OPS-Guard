@@ -1,6 +1,6 @@
 # Effect model v1: design and validation
 
-Owner: Impact owner (Vikas Y K). Work package S3-P4. Status on 27 November 2026: **model and harness built and unit-tested; the kind validation has not been run yet**, so no accuracy figure exists and `effect-model-v1` is not tagged. The model version string is `effect-model-v1-dev` until the gate is met.
+Owner: Impact owner (Vikas Y K). Work package S3-P4. Status on 27 November 2026: **checkout-payments validation completed on kind: 44 trials, zero harness errors, static recall 0.9892**. Validation on the three-tier app and Online Boutique remains open, so Gate G2 is open and `effect-model-v1` is not tagged. The model version string remains `effect-model-v1-dev` until the gate is met.
 
 ## Why
 
@@ -97,11 +97,30 @@ Every record stores the raw state, the change, the events and the samples, so `r
 
 | Topology | Fixture | Catalogue | Status |
 | --- | --- | --- | --- |
-| checkout-payments | `checkout_payments_fixture()` in `impact/validate.py` (pilot app: checkout ×3, payments ×2, web ×1, PDB, Ingress, NetworkPolicy, two ConfigMaps) with `benchmark/fixtures/effect_validation/checkout_payments/topology.json` | 22 changes (19 harmless, 3 deliberately harmful to test S2/S3); `--repeats 2` gives 44 trials | Ready to run |
+| checkout-payments | `checkout_payments_fixture()` in `impact/validate.py` (pilot app: checkout ×3, payments ×2, web ×1, PDB, Ingress, NetworkPolicy, two ConfigMaps) with `benchmark/fixtures/effect_validation/checkout_payments/topology.json` | 22 changes (19 harmless, 3 deliberately harmful to test S2/S3); `--repeats 2` gives 44 trials | Completed on kind, 27 November 2026; first-topology recall target met |
 | three-tier app | S3-P3 (Executor owner) | Drop `manifest.json`, `topology.json`, `changes.json` into `benchmark/fixtures/effect_validation/three_tier/` | Waiting for the fixture |
 | Online Boutique | S3-P5 (Benchmark owner) | Same, in `online_boutique/` | Waiting for the fixture |
 
 The checkout-payments topology declares no calls because the pilot app's workloads do not call each other; the `calls` rule is validated on the three-tier app and Online Boutique, where calls are real.
+
+## Measured checkout-payments result (27 November 2026)
+
+The `effect-model-v1-dev` run used `opsguard-lab`, `python:3.13-slim` and two repetitions of the 22-change catalogue. Saved inputs and observations are in [trials.jsonl](../results/effect-validation/checkout-payments/trials.jsonl); scores and the confusion matrix are in [scores.json](../results/effect-validation/checkout-payments/scores.json). These local result files are Git-ignored.
+
+| Measure | Result |
+| --- | --- |
+| Trials | 44 |
+| Harness errors / uncertain trials | 0 / 0 |
+| Static recall (Wilson 95% interval) | 0.9892 (0.9686-0.9963) |
+| Precision | 0.9512 |
+| Service/trial tier comparisons | 132 |
+| Exact tier accuracy | 0.9545 |
+| Tier under-prediction | 0.0455 |
+| Tier within one | 1.0000 |
+
+Three observed Pod changes were unmatched by the predictions; selector-rule recall was 0.75. The six tier mismatches predicted S0 and observed S1. All other scored tiers matched (100 S0, 20 S1 and six S3). These discrepancies remain visible in the saved scores for follow-up.
+
+This run meets the 0.95 static-recall target for checkout-payments. The three-tier app and Online Boutique still need validation before Gate G2 and the frozen `effect-model-v1` tag. These measurements describe this fixture and development model; sealed-test effect accuracy and generalisation remain open.
 
 ## Commands
 
