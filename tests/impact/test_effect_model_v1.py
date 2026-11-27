@@ -312,7 +312,7 @@ def test_delete_pod_single_replica_is_s3_and_recreated():
     st = state(dep, rs, p0, service("checkout"))
     p = predict(Change("delete_pod", p0), st)
     assert p.service_tiers[ref("Service", "checkout")] == S3
-    assert any(c.kind == "Pod" and c.op == "create" and c.owner == ref("Deployment", "checkout") for c in p.changed)
+    assert any(c.kind == "Pod" and c.op == "any" and c.owner == ref("Deployment", "checkout") for c in p.changed)
     assert p.blast.b8_reversibility == "reversible_with_downtime"
 
 
@@ -405,3 +405,15 @@ def test_scale_body_and_legacy_estimate():
     p = predict_effects(verb="scale", state=st, before=dep, preview=body)
     estimate = to_impact_estimate(p, st)
     assert [s.name for s in estimate.degraded_services] == ["checkout"] and estimate.service_count == 1
+
+
+def test_pdb_counts_pods_across_every_workload_it_selects():
+    """One PDB over two Deployments: each scale-down alone fits, the second one after the first does not."""
+    a = deployment("checkout-a", 2, labels={"app": "checkout", "pool": "a"})
+    b = deployment("checkout-b", 2, labels={"app": "checkout", "pool": "b"})
+    budget = pdb("checkout-pdb", {"app": "checkout"}, minAvailable=3)
+    st = state(a, b, service("checkout", {"app": "checkout"}), budget)
+    assert not run("scale", st, a, edited(a, ("spec", "replicas"), 1)).pdb_violations
+    after_a = st.apply(edited(a, ("spec", "replicas"), 1))
+    second = run("scale", after_a, b, edited(b, ("spec", "replicas"), 1))
+    assert second.pdb_violations and second.service_tiers[ref("Service", "checkout")] == S2

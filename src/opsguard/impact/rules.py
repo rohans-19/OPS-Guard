@@ -264,6 +264,12 @@ class _Builder:
         self.expect("Pod", "any", rule, owner=workload)
         for service in self.services_of(workload):
             self.expect("EndpointSlice", "modify", rule, owner=service)
+        self.expect_budget_status(workload, rule)
+
+    def expect_budget_status(self, workload: ObjectRef, rule: str) -> None:
+        """A PodDisruptionBudget's status follows the health of the Pods it covers."""
+        for budget in self.graph.predecessors(workload, "constrains"):
+            self.expect("PodDisruptionBudget", "modify", rule, name=budget.name)
 
     def service_capacity(self, service: ObjectRef, override: Mapping[ObjectRef, int],
                          state: Optional[ClusterState] = None) -> int:
@@ -341,24 +347,42 @@ class _Builder:
                 return ref, hpa
         return None
 
-    def _pdb_required(self, workload: ObjectRef, replicas: int) -> list[tuple[ObjectRef, int]]:
+    def _pdb_budgets(self, workload: ObjectRef) -> list[tuple[ObjectRef, int, set[ObjectRef]]]:
+        """(budget, required available Pods, workloads it covers) for every PDB selecting the workload.
+
+        A PDB counts every Pod its selector matches, across workloads, against the
+        expected count (the sum of their desired replicas), as the disruption controller does.
+        """
         out = []
         obj = self.state.get(workload)
+        workloads = self.state.workloads()
         for ref, pdb in self.state.items("PodDisruptionBudget").items():
-            if not selector_matches(spec(pdb).get("selector") or {}, labels(pod_template(obj))):
+            selector = spec(pdb).get("selector") or {}
+            if not selector_matches(selector, labels(pod_template(obj))):
                 continue
+            covered = {w for w, o in workloads.items() if selector_matches(selector, labels(pod_template(o)))}
+            expected = sum(_desired(workloads[w]) for w in covered)
             if "minAvailable" in spec(pdb):
-                required = scaled_value(spec(pdb)["minAvailable"], replicas, round_up=True)
+                required = scaled_value(spec(pdb)["minAvailable"], expected, round_up=True)
             elif "maxUnavailable" in spec(pdb):
-                unavailable = scaled_value(spec(pdb)["maxUnavailable"], replicas, round_up=True)
-                required = None if unavailable is None else max(replicas - unavailable, 0)
+                unavailable = scaled_value(spec(pdb)["maxUnavailable"], expected, round_up=True)
+                required = None if unavailable is None else max(expected - unavailable, 0)
             else:
                 required = None
             if required is None:
                 self.unsure(ref, "PodDisruptionBudget without a valid minAvailable or maxUnavailable")
                 continue
-            out.append((ref, required))
+            out.append((ref, required, covered))
         return out
+
+    def _pdb_breaches(self, workload: ObjectRef, after: int) -> list[tuple[ObjectRef, int, int]]:
+        """Budgets whose covered Pods would fall below the minimum with ``after`` ready for this workload."""
+        breaches = []
+        for ref, required, covered in self._pdb_budgets(workload):
+            total = after + sum(self.capacity.ready(w) for w in covered if w != workload)
+            if total < required:
+                breaches.append((ref, required, total))
+        return breaches
 
     def scale_to(self, workload: ObjectRef, old: int, new: int, rule: str) -> None:
         """Replica change on a workload, with the HPA and PodDisruptionBudget checks."""
@@ -390,13 +414,12 @@ class _Builder:
         if effective < old:
             self.capacity_effect(workload, after, rule)
             if self.state.knows("PodDisruptionBudget"):
-                for ref, required in self._pdb_required(workload, old):
-                    if after < required:
-                        self.rule("pdb")
-                        self.pdb.append(ref)
-                        self.notes.append(f"{after} ready replicas would be below {ref.name}'s {required}")
-                        for service in self.services_of(workload):
-                            self.tier(service, max(S2, S3 if after == 0 else S2))
+                for ref, required, total in self._pdb_breaches(workload, after):
+                    self.rule("pdb")
+                    self.pdb.append(ref)
+                    self.notes.append(f"{total} ready Pods would be below {ref.name}'s minimum of {required}")
+                    for service in self.services_of(workload):
+                        self.tier(service, S2)
             else:
                 self.unsure(workload, "PodDisruptionBudgets were not read")
 
@@ -500,6 +523,7 @@ class _Builder:
             self.expect("Pod", "modify", rule, owner=workload)
             for service in self.services_of(workload):
                 self.expect("EndpointSlice", "modify", rule, owner=service)
+            self.expect_budget_status(workload, rule)
         for service in self.services_of(workload):
             total = self.service_capacity(service, {})
             failing = self.capacity.ready(workload)
@@ -516,7 +540,8 @@ class _Builder:
     def delete_pod(self) -> None:
         pod = self.change.target
         self.rule("delete_pod")
-        self.expect("Pod", "delete", "delete_pod", name=pod.name)
+        # The deleted Pod gets a deletionTimestamp and status updates before it goes.
+        self.expect("Pod", "any", "delete_pod", name=pod.name)
         owner = self.state.owning_workload(pod)
         if owner is None:
             self.deleted.add(pod)
@@ -524,11 +549,13 @@ class _Builder:
             self.notes.append("a Pod without a controller is not recreated")
             return
         self.workloads.add(owner)
-        self.expect("Pod", "create", "delete_pod", owner=owner)
+        self.expect("Pod", "any", "delete_pod", owner=owner)
+        self.expect(owner.kind, "modify", "delete_pod", name=owner.name)
         if owner.kind == "Deployment":
             self.expect("ReplicaSet", "modify", "delete_pod", owner=owner)
         for service in self.services_of(owner):
             self.expect("EndpointSlice", "modify", "delete_pod", owner=service)
+        self.expect_budget_status(owner, "delete_pod")
         ready = self.capacity.ready(owner)
         was_ready = pod_is_ready(self.change.before) if self.capacity.observed else True
         self.capacity_effect(owner, max(ready - (1 if was_ready else 0), 0), "delete_pod")
@@ -568,10 +595,9 @@ class _Builder:
         elif low < (_int(spec(before).get("minReplicas"), 1)):
             self.notes.append(f"the HPA may later scale {workload.name} down to {low}")
             if self.state.knows("PodDisruptionBudget"):
-                for ref, required in self._pdb_required(workload, current):
-                    if low < required:
-                        for service in self.services_of(workload):
-                            self.tier(service, S2, latent=True)
+                for ref, required, total in self._pdb_breaches(workload, min(low, self.capacity.ready(workload))):
+                    for service in self.services_of(workload):
+                        self.tier(service, S2, latent=True)
 
     def netpol(self) -> None:
         policy, before, after = self.change.target, self.change.before, self.change.after
