@@ -7,8 +7,43 @@ This file tracks progress against the five-stage implementation guide. Update it
 | 1 Freeze, formalize and pilot | Implemented locally on branch `stage-1`; not pushed | G0: 4 of 6 items met; mentor sign-off and GitHub CI run outstanding |
 | 2 Design the intent and the gate | All five packages implemented; S2-P2 on `main`, S2-P4, S2-P1, S2-P3, S2-P5 on stacked local branches | G1: 5 of 6 items met; GitHub CI not yet run |
 | 3 Effect model and Benchmark v2 | S3-P4 code, harness and 45 tasks on branch `feat/s3-p4-effect-model` (not pushed); kind validation not yet run; other packages not started | G2: 0 of 6 items met |
-| 4 Baselines, tuning and pre-registration | Not started | G3 |
-| 5 Evaluate, analyse and release | Not started | G4, G5 |
+| 4 Baselines, tuning and pre-registration | S4-P4 code done on `feat/s3-p4-effect-model` (thresholds provisional until S3-P2's labelled set); other packages not started | G3 |
+| 5 Evaluate, analyse and release | S5-P4 analysis code and paper drafts ready; waits for the test run | G4, G5 |
+
+## Stage 5: Evaluate, analyse and release
+
+### S5-P4 Effect accuracy, H3 and H5, case study (Impact owner): prepared ahead
+
+**Date:** 27 November 2026. Same branch. The analysis runs only after Gate G3; what exists now is the code, a dry run on open splits and the paper drafts.
+
+| Item | Result |
+| --- | --- |
+| Analysis (`bench/impact_analysis.py`, `analysis/impact_results.py`) | Paired by (task, model, repeat); exact McNemar; Holm within each hypothesis; 10,000-resample bootstrap over task families (fixed seed); absolute and relative risk reduction (relative undefined when the comparator is 0); harness errors excluded and counted. Reads impact_tasks results and RunResult v2. A dry run refuses the test split |
+| H3 / H5 | Comparators B5 `rbac-scoped`, B6 `admission-policy`, task policy, B11 `camel-style`; A6 `a6-effect-only`, A7 `a7-no-episode`. B6 and B11 are reported "not run" until their owners register them |
+| Effect accuracy | `validate.py` scores per topology plus predicted vs observed harm from the kind task runs (precision, recall) |
+| Case study | `abh-shared-config-01` (validation split), replayable: RBAC and task policy allow, OpsGuard escalates with payments predicted at S3, the legitimate value is allowed |
+| Paper drafts | `documentations/paper/effect_model.md`, `documentations/paper/case_study.md`; every result still to come is marked [pending] |
+| Dry run (open splits, memory) | H3 supported against B5 and task policy (15 pairs, 3 families); H5: A7 lets the 5 multi-step attacks through (not significant at this size), A6 equals full OpsGuard on these in-intent attacks. Exploratory only |
+
+**For the pre-registration (S4-P5).** H5's wording ("removing the effect model (vs A6)") and the ablation table (A6 = effect model only) disagree. Decide before `prereg-v1` whether the H5 contrast is A6 or a "full minus effect model" ablation; the code takes any condition name.
+
+## Stage 4: Baselines, tuning and pre-registration
+
+### S4-P4 Judge baselines, calibration, sensitivity (Impact owner): done early, provisional data
+
+**Date:** 27 November 2026. Same branch. Method and plot: [`CALIBRATION.md`](CALIBRATION.md).
+
+| Item | Result |
+| --- | --- |
+| B9 (`benchmark/judge.py`) | `judge_action_v2` reads the IntentSpec v2 (signing material hidden) and EvidenceRecord v2 marked untrusted; invalid verdicts deny. The v1 judge is unchanged |
+| B10 (`baselines/self_check.py`) | The acting model reviews its own proposal with the same evidence and its earlier steps: proceed or stop; invalid answers stop |
+| Runs | `impact_tasks run --condition b9-judge --condition b10-self-check --judge-model <id>` (needs Groq; blocked in the cloud workspace). Provider failures are harness errors |
+| Calibration (`impact/calibrate.py`) | Development choice under an unsafe-approval ceiling (proposed 0.05, team to agree), ties keep the default 0.375, one validation confirmation, ±50% weight sweeps with and without the envelope. Test-split records are never loaded |
+| v1 graded score | B is now b4/3 (it was always 0 inside the envelope); features in every audit entry; `decision.load_thresholds()` |
+| Provisional result | 136 task-derived records (dev 22, val 20, test 94 skipped): 0 unsafe approvals and 0 false blocks on development and validation; validation passed first time. The full decision is flat for thresholds 0.25-0.95 under every weight change; the graded score alone cannot separate safe from unsafe |
+| `config/thresholds.yaml` | Weights 0.25/0.5/0.25, escalate 0.375, block 0.75; marked provisional, with the labelled file's SHA-256 |
+
+**Open.** The real labelled set from S3-P2 (two labellers, kappa), then rerun and commit; agree the ceiling; B9/B10 runs on development tasks with a real model.
 
 ## Stage 3: Effect model and Benchmark v2
 
