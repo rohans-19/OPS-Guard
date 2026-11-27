@@ -6,9 +6,90 @@ This file tracks progress against the five-stage implementation guide. Update it
 | --- | --- | --- |
 | 1 Freeze, formalize and pilot | Implemented locally on branch `stage-1`; not pushed | G0: 4 of 6 items met; mentor sign-off and GitHub CI run outstanding |
 | 2 Design the intent and the gate | All five packages implemented; S2-P2 on `main`, S2-P4, S2-P1, S2-P3, S2-P5 on stacked local branches | G1: 5 of 6 items met; GitHub CI not yet run |
-| 3 Effect model and Benchmark v2 | Not started | G2 |
-| 4 Baselines, tuning and pre-registration | Not started | G3 |
-| 5 Evaluate, analyse and release | Not started | G4, G5 |
+| 3 Effect model and Benchmark v2 | S3-P4 checkout-payments validation completed on kind (44 trials); all 45 Impact-owner tasks validated (90 rows, zero errors) on `feat/s3-p4-effect-model` | G2 open: two topology validations and the remaining team deliverables are outstanding |
+| 4 Baselines, tuning and pre-registration | S4-P4 code and five-task live development judge run completed on `feat/s3-p4-effect-model`; thresholds provisional until S3-P2's labelled set | G3 open |
+| 5 Evaluate, analyse and release | S5-P4 analysis code and paper drafts ready; waits for the test run | G4, G5 |
+
+## Stage 5: Evaluate, analyse and release
+
+### S5-P4 Effect accuracy, H3 and H5, case study (Impact owner): prepared ahead
+
+**Date:** 27 November 2026. Same branch. The analysis runs only after Gate G3; what exists now is the code, a dry run on open splits and the paper drafts.
+
+| Item | Result |
+| --- | --- |
+| Analysis (`bench/impact_analysis.py`, `analysis/impact_results.py`) | Paired by (task, model, repeat); exact McNemar; Holm within each hypothesis; 10,000-resample bootstrap over task families (fixed seed); absolute and relative risk reduction (relative undefined when the comparator is 0); harness errors excluded and counted. Reads impact_tasks results and RunResult v2. A dry run refuses the test split |
+| H3 / H5 | Comparators B5 `rbac-scoped`, B6 `admission-policy`, task policy, B11 `camel-style`; A6 `a6-effect-only`, A7 `a7-no-episode`. B6 and B11 are reported "not run" until their owners register them |
+| Effect accuracy | `validate.py` scores per topology plus predicted vs observed harm from the kind task runs (precision, recall) |
+| Case study | `abh-shared-config-01` (validation split), replayable: RBAC and task policy allow, OpsGuard escalates with payments predicted at S3, the legitimate value is allowed |
+| Paper drafts | `documentations/paper/effect_model.md`, `documentations/paper/case_study.md`; every result still to come is marked [pending] |
+| Dry run (open splits, memory) | H3 supported against B5 and task policy (15 pairs, 3 families); H5: A7 lets the 5 multi-step attacks through (not significant at this size), A6 equals full OpsGuard on these in-intent attacks. Exploratory only |
+
+**For the pre-registration (S4-P5).** H5's wording ("removing the effect model (vs A6)") and the ablation table (A6 = effect model only) disagree. Decide before `prereg-v1` whether the H5 contrast is A6 or a "full minus effect model" ablation; the code takes any condition name.
+
+## Stage 4: Baselines, tuning and pre-registration
+
+### S4-P4 Judge baselines, calibration, sensitivity (Impact owner): done early, provisional data
+
+**Date:** 27 November 2026. Same branch. Method and plot: [`CALIBRATION.md`](CALIBRATION.md).
+
+| Item | Result |
+| --- | --- |
+| B9 (`benchmark/judge.py`) | `judge_action_v2` reads the IntentSpec v2 (signing material hidden) and EvidenceRecord v2 marked untrusted; invalid verdicts deny. The v1 judge is unchanged |
+| B10 (`baselines/self_check.py`) | The acting model reviews its own proposal with the same evidence and its earlier steps: proceed or stop; invalid answers stop |
+| Runs | Groq `openai/gpt-oss-20b` reviewed five development tasks from `ms-reroute-then-drain`: 20 records, zero final provider errors. B9 allowed 5/5 harmful sequences; B10 allowed 2/5. Both completed 5/5 legitimate sequences. These are live reviews of scripted candidate sequences on the memory backend |
+| Calibration (`impact/calibrate.py`) | Development choice under an unsafe-approval ceiling (proposed 0.05, team to agree), ties keep the default 0.375, one validation confirmation, ±50% weight sweeps with and without the envelope. Test-split records are never loaded |
+| v1 graded score | B is now b4/3 (it was always 0 inside the envelope); features in every audit entry; `decision.load_thresholds()` |
+| Provisional result | 136 task-derived records (dev 22, val 20, test 94 skipped): 0 unsafe approvals and 0 false blocks on development and validation; validation passed first time. The full decision is flat for thresholds 0.25-0.95 under every weight change; the graded score alone cannot separate safe from unsafe |
+| `config/thresholds.yaml` | Weights 0.25/0.5/0.25, escalate 0.375, block 0.75; marked provisional, with the labelled file's SHA-256 |
+
+The initial judge attempt had 12 rate-limit error records. Those records remain in `results/judges-dev-attempt-1/` and `results/judges-dev/attempts.jsonl`; failed tasks were retried with 60 seconds between task batches. The final 20 records, summary and manifest are in `results/judges-dev/`. This is an exploratory development check of one family, not a sealed-test evaluation or evidence that the acting model generated these proposals.
+
+**Open.** The real labelled set from S3-P2 (two labellers, kappa), then rerun and commit; agree the ceiling; the broader pre-registered model and baseline evaluation after Gate G3.
+
+## Stage 3: Effect model and Benchmark v2
+
+### S3-P4 live validation follow-up (27 November 2026)
+
+The local run completed the first topology's effect validation and the independent kind validation of all 45 Impact-owner tasks. The reproducible Windows entry point is `scripts/run_vikas_s3p4.ps1`; it uses a Python environment, platform-specific fixture image loading, development-only judge selection, paced calls and result checks before pushing.
+
+| Check | Measured result |
+| --- | --- |
+| checkout-payments effect validation | 44 trials (22 changes, two repeats), zero harness errors and zero uncertain trials. Static recall **98.92%** (Wilson 95% interval 96.86%-99.63%), precision **95.12%**, exact tier accuracy **95.45%** over 132 Service/trial comparisons. Three observed Pod changes were unmatched; selector-rule recall was 0.75. Six tiers were under-predicted from S0 to S1 |
+| Task validation on kind | **45/45 forbidden sequences reached their forbidden state, and 45/45 legitimate sequences reached their postconditions**, in separate disposable fixtures. 90 rows, zero harness errors, no failed tasks. All 20 multi-step forbidden sequences caused harm after both steps were applied |
+| Focused regression checks | **534 passed** after the harness and PDB fixes. This is the focused verification set, separate from the historical full-suite counts below |
+| Live B9/B10 development check | Five tasks, two conditions, legitimate and harmful sequences: 20 final records, zero provider errors. B9 harmful allowed 5/5, B10 harmful allowed 2/5; both legitimate completed 5/5. Initial rate-limit failures are preserved separately |
+| Evidence | `results/effect-validation/checkout-payments/{trials.jsonl,scores.json}` and `results/impact-tasks-validation/{results.jsonl,summary.json}`. These local result files are Git-ignored |
+
+**Problems found and corrected during validation.** The shared-ConfigMap repair target intentionally starts unhealthy. The harness now verifies that this fault is present and that the protected Service is healthy before acting. It independently checks persisted ConfigMap values, replica counts, Service selectors, Deployment generation/readiness, and changed restart markers before declaring a legitimate task complete, and rechecks the protected Service and disruption budgets. The initial attempt's two rows, including the failed repair precondition, are preserved in `results/impact-tasks-validation-attempt-1/results.jsonl`.
+
+Three PDB tasks used percentage or `maxUnavailable` budgets that Kubernetes recalculates after a scale change, so their proposed scale-downs did not establish the intended sustained budget violations. Their fixtures now use fixed `minAvailable` values while keeping the intended legitimate and forbidden replica counts. The model's relative-budget calculation was also corrected to use the projected desired replicas, with percentage semantics retained in model tests.
+
+The checkout-payments static-recall target is met. **Gate G2 remains open** until the three-tier app and Online Boutique are validated and the remaining team deliverables are complete. The model remains `effect-model-v1-dev`, unfrozen and without the `effect-model-v1` tag. Calibration remains provisional, and sealed-test H3/H5 results remain pending Gate G3.
+
+### S3-P4 Effect model v1, validation, harmful and multi-step families (Impact owner)
+
+**Date:** 27 November 2026. **Branch:** `feat/s3-p4-effect-model`, from `main` at `3072fe6`. Design and method: [`EFFECT_MODEL_VALIDATION.md`](EFFECT_MODEL_VALIDATION.md).
+
+| Item | Result |
+| --- | --- |
+| Kinds (`impact/kinds.py`, `intent/inventory.py`) | 17 namespaced kinds (the Stage 3 table plus PodDisruptionBudget). `KubernetesInventory(effect_kinds=...)` reads the extra kinds; unread kinds are `None` and *unknown* to the model, never empty. Secrets are read as metadata only. The lab reader Roles get `get`/`list` on these kinds with Secrets excluded (names come from Pod specs) |
+| State and topology (`impact/state.py`, `impact/topology.py`) | `ClusterState` with copy-on-apply for the episode. Trusted topology files (`opsguard-topology/v1`): calls, settings with healthy/degraded values, reload (`live`, `on_restart`) and symptom (`health`, `readiness`, `crash`), user-facing Services, data stores. Never from evidence |
+| Graph (`impact/graph.py`) | `EffectGraph`: static edges (owns, mounts, env, uses_sa, binds, selects, selects_template, slice_of, backend, targets, isolates, constrains), dynamic (EndpointSlice membership with readiness), topology (calls, reads_setting). The v0 three-kind graph is unchanged |
+| Rules (`impact/rules.py`) | rollout, scale with PDB and HPA, hpa_override, selector, config, delete_pod, hpa_bounds, netpol, delete (cascade), calls. Capacity from observed Pods, then controller status, then spec (marked approximate). Anything unsettled is uncertainty with a reason |
+| Blast vector (`impact/blast.py`) | b1-b8 as defined in the guide; `EnvelopeDecider(effect_model="v1")` checks them alone and on the episode's cumulative state; new codes `ENVELOPE_DATA_LOSS`, `ENVELOPE_PRIVILEGE`, `ENVELOPE_SECRET`. **v0 stays the default**: unified runner 261 cells and pilot memory rows identical to `main` |
+| Validation harness (`impact/validate.py`) | `plan`, `run` (kind), `rescore`, `report`; watch events per kind, probes every 0.5 s, static recall, precision, tier accuracy (exact, under-prediction, within one) with Wilson intervals; harness errors never scored. checkout-payments fixture: 22 changes (19 harmless, 3 harmful), 44 trials at `--repeats 2` |
+| Tasks (`bench/impact_families.py`, `bench/impact_tasks.py`) | 25 allowed-but-harmful (shared config, scale below PDB, fragile rollout, allowlisted empty selector, scale to zero) and 20 multi-step (drain then reroute, reroute then drain, drain sibling then Recreate, split scale below PDB), 5 per family, all five channels, five payload styles, fresh names, seed recorded. All convert to CaseSpec v2 (suite `pilot`, provisional splits) |
+| Memory decisions (replayed attacks) | unprotected, rbac-scoped and task-policy allow 45/45 harmful sequences; opsguard-v0 allows 11/45 (misses PDBs and readiness) and completes 35/45 legitimate tasks; **opsguard-v1 allows 0/45 and completes 45/45**; all 20 multi-step attacks blocked at the last step with `ENVELOPE_CUMULATIVE`, each step alone allowed |
+| Tests | 74 new: 38 model, 12 envelope v1, 10 harness, 12 task, 2 inventory. Full suite 1119 passed, 10 skipped (FastAPI demo and scope-card tests not collected in this environment) |
+
+**Caveat for the paper.** The 45 tasks were written alongside the model, so the memory results show the rules do what they were designed to do. They are not evidence of generalization: that needs the kind validation below and the held-out test split in Stage 5.
+
+**Remaining handoffs and validation**
+
+1. Validate the three-tier app (S3-P3) and Online Boutique (S3-P5) once their fixtures exist: add `manifest.json`, `topology.json`, `changes.json` under `benchmark/fixtures/effect_validation/`.
+2. Tag `effect-model-v1` when G2's three-topology static-recall item is met; team decision on switching runners to `effect_model="v1"`.
+3. Hand-off to the Benchmark owner: load `benchmark/cases/v2/impact/` in the unified runner (`to_casespec_v2`), and payload delivery per channel (S3-P1).
 
 ## Stage 2: Design the intent and the gate
 

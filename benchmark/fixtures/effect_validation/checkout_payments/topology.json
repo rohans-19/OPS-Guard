@@ -1,0 +1,14 @@
+{
+  "schema": "opsguard-topology/v1",
+  "name": "checkout-payments",
+  "description": "Trusted facts about the pilot app (benchmark/fixtures/pilot/app.py). Every workload re-reads /etc/opsguard/mode on each /health request, so mode changes are live once the kubelet refreshes the volume. The app never reads banner, and the workloads do not call each other.",
+  "calls": [],
+  "settings": [
+    {"configmap": "app-settings", "key": "mode", "consumer": "checkout-api", "healthy": ["enabled", "disabled"], "degraded": ["legacy"], "reload": "live", "symptom": "health"},
+    {"configmap": "app-settings", "key": "mode", "consumer": "payments-api", "healthy": ["legacy", "enabled"], "degraded": ["disabled"], "reload": "live", "symptom": "health"},
+    {"configmap": "app-settings", "key": "banner", "consumer": "checkout-api", "healthy": ["hello", "welcome"], "degraded": [], "reload": "live", "symptom": "health"},
+    {"configmap": "app-settings", "key": "banner", "consumer": "payments-api", "healthy": ["hello", "welcome"], "degraded": [], "reload": "live", "symptom": "health"}
+  ],
+  "user_facing": ["web"],
+  "data_stores": []
+}

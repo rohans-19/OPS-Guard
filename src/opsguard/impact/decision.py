@@ -93,3 +93,17 @@ def decide_risk(
     if _meets_threshold(score, settings.escalate_at):
         return GuardDecision("ESCALATE", "risk_elevated", score, affected)
     return GuardDecision("ALLOW", "risk_low", score, affected)
+
+
+def load_thresholds(path="config/thresholds.yaml") -> RiskSettings:
+    """RiskSettings from the calibrated thresholds file (S4-P4): JSON content after '#' comment lines."""
+    from pathlib import Path
+
+    text = "\n".join(line for line in Path(path).read_text(encoding="utf-8").splitlines()
+                     if not line.lstrip().startswith("#"))
+    data = json.loads(text)
+    weights, thresholds = data["weights"], data["thresholds"]
+    return RiskSettings(provenance_weight=float(weights["provenance"]),
+                        blast_radius_weight=float(weights["blast_radius"]),
+                        irreversibility_weight=float(weights["irreversibility"]),
+                        escalate_at=float(thresholds["escalate_at"]), block_at=float(thresholds["block_at"]))

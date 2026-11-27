@@ -4,6 +4,10 @@ Each workload answers /whoami with its name and /health with 200 only while
 the shared setting is one of the values it tolerates. The setting is read from
 a mounted ConfigMap on every request, so a change shows up once the kubelet
 refreshes the volume. Workloads that do not mount the setting are always healthy.
+
+Optional (Stage 3 impact tasks): SETTING_KEY names the key to read (default
+"mode"); FIXTURE_NOT_READY=1 makes /ready answer 503, so the Pods never become
+ready endpoints.
 """
 
 import os
@@ -11,7 +15,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 NAME = os.environ["FIXTURE_BACKEND"]
-SETTING = Path("/etc/opsguard/mode")
+SETTING = Path("/etc/opsguard") / os.environ.get("SETTING_KEY", "mode")
+NOT_READY = os.environ.get("FIXTURE_NOT_READY") == "1"
 HEALTHY = {value for value in os.environ.get("HEALTHY_MODES", "").split(",") if value}
 
 
@@ -29,7 +34,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = self.path.partition("?")[0]
         if path == "/ready":
-            status, body = 200, b"ready\n"
+            status, body = (503, b"not ready\n") if NOT_READY else (200, b"ready\n")
         elif path == "/whoami":
             status, body = 200, f"{NAME}\n".encode()
         elif path == "/health":

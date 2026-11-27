@@ -17,6 +17,8 @@ from uuid import uuid4
 
 import httpx
 
+from opsguard.impact.kinds import reader_rules
+
 from opsguard.benchmark.scale_cases import DeploymentState, Injection, Workload
 from opsguard.benchmark.scale_lab import ScaleConflict
 from opsguard.evidence.pod_logs import PodLogSource
@@ -77,7 +79,7 @@ def _fixture(namespace: str, workloads: dict[str, Workload], app: str, log_targe
     dep_read = {"apiGroups": ["apps"], "resources": ["deployments"], "verbs": ["get"],
                 "resourceNames": sorted(workloads)}
     for role, rules in {
-        "reader": [dep_read,
+        "reader": [dep_read, *reader_rules(include_secrets=False),
                    {"apiGroups": ["apps"], "resources": ["deployments", "replicasets"], "verbs": ["list"]},
                    {"apiGroups": ["discovery.k8s.io"], "resources": ["endpointslices"], "verbs": ["list"]},
                    {"apiGroups": [""], "resources": ["pods", "services"], "verbs": ["list"]},

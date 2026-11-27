@@ -13,6 +13,7 @@ venv/
 
 # Environment variables
 .env
+env.env
 
 # Generated results
 results/

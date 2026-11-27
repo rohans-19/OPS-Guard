@@ -30,6 +30,7 @@ from opsguard.benchmark.kind_scale_lab import _command
 from opsguard.intent.inventory import KubernetesInventory
 from opsguard.intent.resolver import deployment_for_pod
 from opsguard.kube.executor import KubernetesTransport
+from opsguard.impact.kinds import reader_rules
 
 APP_CONFIGMAP = "selector-app"
 PROBES_PER_SERVICE = 3
@@ -87,7 +88,9 @@ def selector_manifest(namespace: str, fixture: SelectorFixture, task_id: str, ap
     roles = {
         "setup": [{"apiGroups": ["apps"], "resources": ["deployments"], "verbs": ["create"]},
                   {"apiGroups": [""], "resources": ["services", "configmaps", "events"], "verbs": ["create"]}],
-        "reader": [*state, {"apiGroups": [""], "resources": ["pods/log"], "verbs": ["get"]},
+        # Effect model v1 (S3-P4): list and get on its kinds, Secrets excluded (names come from Pod specs).
+        "reader": [*state, *reader_rules(include_secrets=False),
+                   {"apiGroups": [""], "resources": ["pods/log"], "verbs": ["get"]},
                    {"apiGroups": [""], "resources": ["events"], "verbs": ["list"]},
                    {"apiGroups": [""], "resources": ["configmaps"], "resourceNames": [EVIDENCE_CONFIGMAP], "verbs": ["get"]}],
         "executor": [{"apiGroups": [""], "resources": ["services"], "verbs": ["patch"], "resourceNames": services}],

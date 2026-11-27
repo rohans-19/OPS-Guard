@@ -356,3 +356,67 @@ def predict_impact(
             uncertain.update(affected_services(graph, service))
 
     return ImpactEstimate(reachable, _ordered(degraded), _ordered(uncertain - degraded), len(service_index))
+
+
+# ---------------------------------------------------------------------------
+# Effect model v1 entry point (S3-P4). predict_impact above stays the v0
+# estimate so v1.0-reference results remain reproducible.
+# ---------------------------------------------------------------------------
+
+EFFECT_MODEL_VERSION = "effect-model-v1-dev"
+
+
+def predict_effects(*, verb: str, state, before: Object, preview: Optional[Object], topology=None):
+    """Effect model v1 for one typed change against a ``ClusterState``.
+
+    A Scale subresource body (no Pod template) is merged into the stored
+    workload first, so every rule sees whole objects.
+    """
+    from copy import deepcopy
+
+    from opsguard.impact.rules import Change, predict
+    from opsguard.impact.state import ObjectRef
+
+    def whole(obj: Optional[Object]) -> Optional[Object]:
+        if obj is None or obj.get("kind") != "Scale":
+            return obj
+        metadata = _field(obj, "metadata")
+        stored = next((o for r, o in state.workloads().items() if r.name == metadata.get("name")), None)
+        if stored is None:
+            raise ValueError("a Scale body needs its workload in the inventory")
+        merged = deepcopy(dict(stored))
+        merged.setdefault("spec", {})["replicas"] = _field(obj, "spec").get("replicas")
+        return merged
+
+    before, preview = whole(before), whole(preview)
+    for obj in (before, preview):
+        if obj is not None and obj.get("kind") is None:
+            raise ValueError("objects passed to the effect model need their kind")
+    return predict(Change(verb, before, preview), state, topology)
+
+
+def to_impact_estimate(prediction, state) -> ImpactEstimate:
+    """The v0 estimate shape of a v1 prediction, for the graded score and existing reports.
+
+    degraded = Services at S2 or worse (now or at the next restart); uncertain = Services
+    behind anything the model could not settle; reachable = every affected Service.
+    """
+    from opsguard.impact.graph import EffectGraph
+
+    def legacy(ref):
+        return ResourceRef("service", ref.namespace, ref.name)
+
+    degraded = {s for s, t in {**prediction.latent_tiers, **prediction.service_tiers}.items() if t >= 2}
+    degraded |= {s for s, t in prediction.latent_tiers.items() if t >= 2}
+    graph = EffectGraph(state)
+    uncertain = set()
+    for ref, _ in prediction.uncertain:
+        if ref.kind == "Service":
+            uncertain.add(ref)
+        elif ref.kind in ("Deployment", "StatefulSet", "DaemonSet", "Job"):
+            uncertain |= graph.services_of(ref)
+        else:
+            uncertain |= {s for s in graph.reachable(ref) if getattr(s, "kind", None) == "Service"}
+    reachable = set(prediction.affected_services) | degraded | uncertain
+    return ImpactEstimate(_ordered(map(legacy, reachable)), _ordered(map(legacy, degraded)),
+                          _ordered(map(legacy, uncertain - degraded)), len(state.items("Service")))
