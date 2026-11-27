@@ -37,12 +37,20 @@ ENVELOPE_REASONS = (
     "ENVELOPE_IRREVERSIBLE",   # the intent requires reversible actions
     "ENVELOPE_DELETION",       # deletion is not allowed by the intent
     "ENVELOPE_CUMULATIVE",     # only the combination with earlier approved changes breaks the envelope
+    # Effect model v1 (S3-P4) adds one code per blast-radius dimension it can breach:
+    "ENVELOPE_DATA_LOSS",      # b5: a PersistentVolumeClaim or declared data store would lose data
+    "ENVELOPE_PRIVILEGE",      # b6: RBAC or a workload identity changes and the intent does not allow it
+    "ENVELOPE_SECRET",         # b7: a new path to a Secret and the intent does not allow it
 )
 # No typed operation deletes, grants privileges or touches Secrets, and each
 # one can be undone by a further typed write. Stage 3 fills these from the
 # full effect vector; the checks are wired so that work only changes the inputs.
 IRREVERSIBLE_VERBS: frozenset[str] = frozenset()
-DELETING_VERBS: frozenset[str] = frozenset()
+DELETING_VERBS: frozenset[str] = frozenset({"delete", "delete_pod"})
+# request.resource -> Kubernetes kind, for the effect model v1 path.
+RESOURCE_KINDS = {"deployment": "Deployment", "statefulset": "StatefulSet", "service": "Service",
+                  "configmap": "ConfigMap", "pod": "Pod", "horizontalpodautoscaler": "HorizontalPodAutoscaler",
+                  "networkpolicy": "NetworkPolicy"}
 
 
 # ---------------------------------------------------------------------------
@@ -175,6 +183,7 @@ class EpisodeState:
     def __init__(self, task_id: str = ""):
         self.task_id = task_id
         self.start: Optional[_State] = None
+        self.snapshot = None
         self.approved: list[dict] = []
         self._hints: dict[tuple, tuple[ResourceRef, ...]] = {}
 
@@ -182,6 +191,27 @@ class EpisodeState:
         """Take the starting snapshot once, on the task's first proposal."""
         if self.start is None:
             self.start = _State.from_snapshot(snapshot)
+            self.snapshot = snapshot
+
+    def cluster(self, complete_kinds=()):
+        """The start snapshot as a ``ClusterState`` with every approved change applied (effect model v1).
+
+        ``complete_kinds`` are kinds the trusted fixture declares absent when they were not read.
+        """
+        from opsguard.impact.state import ClusterState
+
+        if self.snapshot is None:
+            raise ValueError("the episode has not started")
+        state = ClusterState.from_snapshot(self.snapshot)
+        state = ClusterState(state.namespace, state.objects, state.read | frozenset(complete_kinds))
+        start = state
+        for change in self.approved:
+            obj = dict(change["object"])
+            kind = RESOURCE_KINDS.get(change.get("resource", ""))
+            if obj.get("kind") in (None,) and kind:
+                obj["kind"] = kind
+            state = state.apply(obj)
+        return start, state
 
     def predicted(self) -> _State:
         """The start snapshot with every approved change applied, in order."""
@@ -202,6 +232,7 @@ class EpisodeState:
     def record(self, request, obj: dict) -> None:
         """Called by the gateway after a write is applied."""
         self.approved.append({"verb": request.verb, "name": request.name, "object": deepcopy(obj),
+                              "resource": getattr(request, "resource", None),
                               "reachable": self._hints.pop((request.verb, request.name), ())})
 
 
@@ -219,9 +250,19 @@ class EnvelopeDecider:
     uses_episode = True
 
     def __init__(self, envelope, *, config_effects: tuple[ConfigEffect, ...] = (), trusted_edges=(),
-                 settings: RiskSettings = RiskSettings(), provenance_risk: float = 0.0):
+                 settings: RiskSettings = RiskSettings(), provenance_risk: float = 0.0,
+                 effect_model: str = "v0", topology=None, complete_kinds=()):
         self.envelope, self.config_effects, self.trusted_edges = envelope, tuple(config_effects), tuple(trusted_edges)
         self.settings, self.provenance_risk = settings, provenance_risk
+        if effect_model not in ("v0", "v1"):
+            raise ValueError("effect_model must be v0 or v1")
+        # v1 (S3-P4): the 17-kind effect model, controller rules and blast vector b1-b8.
+        # ``topology`` is the fixture's trusted topology; ConfigEffect rules are folded into it.
+        from opsguard.impact.topology import TrustedTopology, from_config_effects, merge
+
+        self.effect_model = effect_model
+        self.topology = merge(topology or TrustedTopology(), from_config_effects(self.config_effects))
+        self.complete_kinds = frozenset(complete_kinds)
         self.episode: Optional[EpisodeState] = None
         self.audit: list[dict] = []
 
@@ -238,6 +279,8 @@ class EnvelopeDecider:
         if self.episode is None:
             raise ValueError("the gateway did not attach an episode")
         self.episode.begin(current)
+        if self.effect_model == "v1":
+            return self._decide_v1(request, preview)
         irreversible = 1.0 if request.verb in IRREVERSIBLE_VERBS else 0.0
         try:
             # "Alone" means this action applied to the episode's starting snapshot; "cumulative"
@@ -295,3 +338,89 @@ class EnvelopeDecider:
             self.episode.hint(request, impact.reachable_services)
         return self._result(request, graded.decision, graded.reason_code, "graded", impact.reachable_services,
                             risk_score=graded.risk_score)
+
+    # -- effect model v1 -------------------------------------------------------------
+    def _decide_v1(self, request, preview):
+        """Three steps with the v1 prediction and its blast vector, alone and after the episode."""
+        from opsguard.impact.blast import S2
+        from opsguard.impact.effects import predict_effects, to_impact_estimate
+        from opsguard.impact.state import ObjectRef
+
+        try:
+            start, cumulative = self.episode.cluster(self.complete_kinds)
+            kind = RESOURCE_KINDS[request.resource]
+            target = ObjectRef(kind, start.namespace, request.name)
+            obj = start.get(target)
+            if obj is None:
+                raise KeyError(str(target))
+            preview = None if preview is None else {**preview, "kind": preview.get("kind") or kind}
+            if preview is not None and preview.get("kind") == "Scale":
+                preview = {**preview}
+            alone = predict_effects(verb=request.verb, state=start, before=obj, preview=preview,
+                                    topology=self.topology)
+            now_obj = cumulative.get(target) or obj
+            together = predict_effects(verb=request.verb, state=cumulative, before=now_obj, preview=preview,
+                                       topology=self.topology)
+        except (KeyError, TypeError, ValueError, AttributeError) as error:
+            return self._result(request, "ESCALATE", "IMPACT_UNKNOWN", "envelope", error=type(error).__name__,
+                                effect_model="v1")
+
+        envelope, blast = self.envelope, alone.blast
+        services = alone.affected_services
+        detail = {"effect_model": "v1", "blast": blast.as_dict(), "rules": list(alone.rules),
+                  "uncertain": [f"{ref}: {why}" for ref, why in alone.uncertain], "notes": list(alone.notes)}
+        degraded = {s for s, t in {**alone.latent_tiers, **alone.service_tiers}.items() if t >= S2}
+        degraded |= {s for s, t in alone.latent_tiers.items() if t >= S2}
+        unknown = {ref for ref, _ in alone.uncertain}
+        breach = None
+        if degraded:
+            breach = ("ENVELOPE_DEGRADATION", degraded)
+        elif unknown:
+            breach = ("IMPACT_UNKNOWN", unknown)
+        elif blast.b5_data_loss:
+            breach = ("ENVELOPE_DATA_LOSS", services)
+        elif blast.b6_privilege and not envelope.allow_privilege_change:
+            breach = ("ENVELOPE_PRIVILEGE", services)
+        elif blast.b7_secret_path and not envelope.allow_secret_change:
+            breach = ("ENVELOPE_SECRET", services)
+        elif not envelope.allow_deletion and request.verb in DELETING_VERBS:
+            breach = ("ENVELOPE_DELETION", services)
+        elif envelope.require_reversible and blast.b8_reversibility == "irreversible":
+            breach = ("ENVELOPE_IRREVERSIBLE", services)
+        elif len(services) > envelope.max_services_affected:
+            breach = ("ENVELOPE_SERVICES", services)
+        elif blast.b2_namespaces > envelope.max_namespaces:
+            breach = ("ENVELOPE_NAMESPACES", services)
+        if breach:
+            return self._result(request, "ESCALATE", breach[0], "envelope", _services(breach[1]), **detail)
+
+        # Cumulative: this action on the state the episode has already produced.
+        combined_degraded = {s for s, t in {**together.latent_tiers, **together.service_tiers}.items() if t >= S2}
+        combined_services = {ResourceRef("service", s.namespace, s.name) for s in services}
+        combined_services |= self.episode.affected()
+        if combined_degraded or together.uncertain or len(combined_services) > envelope.max_services_affected:
+            hit = combined_degraded or {ref for ref, _ in together.uncertain} or services
+            return self._result(request, "BLOCK", "ENVELOPE_CUMULATIVE", "envelope", _services(hit),
+                                approved_steps=len(self.episode.approved), **detail)
+
+        estimate = to_impact_estimate(alone, start)
+        inside = ImpactEstimate(estimate.reachable_services, (), (), estimate.service_count)
+        irreversible = {"reversible": 0.0, "reversible_with_downtime": 0.5, "irreversible": 1.0}[blast.b8_reversibility]
+        graded = graded_score(inside, provenance_risk=self.provenance_risk, irreversibility=irreversible,
+                              settings=self.settings)
+        if graded.decision == "ALLOW":
+            self.episode.hint(request, inside.reachable_services)
+        return self._result(request, graded.decision, graded.reason_code, "graded", inside.reachable_services,
+                            risk_score=graded.risk_score, **detail)
+
+
+def _services(refs):
+    """Legacy Service refs for the audit's predicted_services field (non-Services are named as kind/name)."""
+    out = []
+    for ref in refs:
+        kind = getattr(ref, "kind", "")
+        if kind in ("service", "Service"):
+            out.append(ResourceRef("service", ref.namespace, ref.name))
+        else:
+            out.append(ResourceRef("service", ref.namespace, f"{kind}:{ref.name}"))
+    return tuple(sorted(set(out), key=str))
