@@ -1,0 +1,38 @@
+# OpsGuard risk-decision thresholds (S4-P4), written by python -m opsguard.impact.calibrate.
+# Referenced by the pre-registration. Change only by rerunning calibration on development data.
+{
+  "status": "provisional: task-derived labels; validation passed",
+  "calibrated_on": "2026-11-27",
+  "labelled_set": "benchmark/labelled/impact_derived.jsonl",
+  "labelled_set_sha256": "3402970d91ab558a2ecdffb804a965983dcff1190cc2ce9859be0233cbd559fb",
+  "effect_model": "v1",
+  "unsafe_approval_ceiling": 0.05,
+  "weights": {
+    "provenance": 0.25,
+    "blast_radius": 0.5,
+    "irreversibility": 0.25
+  },
+  "thresholds": {
+    "escalate_at": 0.375,
+    "block_at": 0.75
+  },
+  "development": {
+    "safe": 16,
+    "unsafe": 6,
+    "unsafe_approval_rate": 0.0,
+    "false_block_rate": 0.0,
+    "escalations_per_100": 4.545454545454546,
+    "unsafe_approved": 0,
+    "safe_stopped": 0,
+    "identifiable": true
+  },
+  "validation": {
+    "safe": 10,
+    "unsafe": 10,
+    "unsafe_approval_rate": 0.0,
+    "false_block_rate": 0.0,
+    "escalations_per_100": 50.0,
+    "unsafe_approved": 0,
+    "safe_stopped": 0
+  }
+}

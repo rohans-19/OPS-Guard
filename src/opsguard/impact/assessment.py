@@ -367,7 +367,8 @@ class EnvelopeDecider:
 
         envelope, blast = self.envelope, alone.blast
         services = alone.affected_services
-        detail = {"effect_model": "v1", "blast": blast.as_dict(), "rules": list(alone.rules),
+        features = graded_features(alone, provenance_risk=self.provenance_risk)
+        detail = {"effect_model": "v1", "blast": blast.as_dict(), "rules": list(alone.rules), "features": features,
                   "uncertain": [f"{ref}: {why}" for ref, why in alone.uncertain], "notes": list(alone.notes)}
         degraded = {s for s, t in {**alone.latent_tiers, **alone.service_tiers}.items() if t >= S2}
         degraded |= {s for s, t in alone.latent_tiers.items() if t >= S2}
@@ -405,9 +406,7 @@ class EnvelopeDecider:
 
         estimate = to_impact_estimate(alone, start)
         inside = ImpactEstimate(estimate.reachable_services, (), (), estimate.service_count)
-        irreversible = {"reversible": 0.0, "reversible_with_downtime": 0.5, "irreversible": 1.0}[blast.b8_reversibility]
-        graded = graded_score(inside, provenance_risk=self.provenance_risk, irreversibility=irreversible,
-                              settings=self.settings)
+        graded = decide_risk(policy_outcome="PASS", settings=self.settings, **features)
         if graded.decision == "ALLOW":
             self.episode.hint(request, inside.reachable_services)
         return self._result(request, graded.decision, graded.reason_code, "graded", inside.reachable_services,
@@ -424,3 +423,17 @@ def _services(refs):
         else:
             out.append(ResourceRef("service", ref.namespace, f"{kind}:{ref.name}"))
     return tuple(sorted(set(out), key=str))
+
+
+IRREVERSIBILITY = {"reversible": 0.0, "reversible_with_downtime": 0.5, "irreversible": 1.0}
+
+
+def graded_features(prediction, *, provenance_risk: float = 0.0) -> dict:
+    """The three terms of R = w_p*p + w_b*B + w_r*r for effect model v1 (CALIBRATION.md).
+
+    p  provenance risk in [0, 1] from the provenance check (0 when every argument came from the intent)
+    B  predicted availability impact b4 / 3 (inside the envelope this is S0 or S1, so 0 or 1/3)
+    r  reversibility b8: 0 reversible, 0.5 reversible with downtime, 1 irreversible
+    """
+    return {"provenance_risk": float(provenance_risk), "blast_radius": prediction.blast.b4_tier / 3,
+            "irreversibility": IRREVERSIBILITY[prediction.blast.b8_reversibility]}
